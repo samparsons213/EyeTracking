@@ -51,6 +51,7 @@ for line_skip = 1:(first_data_line-1)
     end
 end
 experiment_idx = 1;
+add_eye_track = true;
 fprintf('Counting number of data events for each experiment in file...\n')
 while ~feof(fileID)
     new_line = fgetl(fileID);
@@ -58,7 +59,13 @@ while ~feof(fileID)
     if strcmp(new_line{1}, 'END')
         experiment_idx = experiment_idx + 1;
     end
-    if (length(new_line) == 5) && strcmp(new_line{end}, '.')
+    if strcmp(new_line{1}, 'SBLINK')
+        add_eye_track = false;
+    end
+    if strcmp(new_line{1}, 'EBLINK')
+        add_eye_track = true;
+    end
+    if (length(new_line) == 5) && strcmp(new_line{end}, '.') && add_eye_track
         n_eye_tracks(experiment_idx) = n_eye_tracks(experiment_idx) + 1;
     end
     if (length(new_line) == 10) && strcmp(new_line{5}, 'TARGET_POS')
@@ -88,6 +95,7 @@ end
 experiment_idx = 1;
 eye_track_row_idx = 0;
 target_placing_row_idx = 0;
+add_eye_track = true;
 fprintf('Extracting data events for each experiment from file...\n')
 while ~feof(fileID)
     new_line = fgetl(fileID);
@@ -97,7 +105,13 @@ while ~feof(fileID)
         eye_track_row_idx = 0;
         target_placing_row_idx = 0;
     end
-    if (length(new_line) == 5) && strcmp(new_line{end}, '.')
+    if strcmp(new_line{1}, 'SBLINK')
+        add_eye_track = false;
+    end
+    if strcmp(new_line{1}, 'EBLINK')
+        add_eye_track = true;
+    end
+    if (length(new_line) == 5) && strcmp(new_line{end}, '.') && add_eye_track
         eye_track_row_idx = eye_track_row_idx + 1;
         eye_tracking{experiment_idx, 1}(eye_track_row_idx) =...
             str2double(new_line{1});

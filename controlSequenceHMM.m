@@ -1,12 +1,8 @@
-function [control_seq] = controlSequence(eye_tracking, target_placement)
-% Takes a sequence of eye tracking data, and a sequence of target
-% placements for the data, and returns the sequence of target locations for
-% each time stamp of the data.
-
-% The elements of the original data sequence prior to the target first
-% appearing have their corresponding control sequence elements set to the
-% next observed eye tracking location, i.e. u(1) = y(2) where u(t) is the
-% control at time t, and y(t) is the eye tracking data at time t.
+function control_seq = controlSequenceHMM(eye_tracking, target_placement)
+% Transforms the target placements for 1 person's data into the correct
+% form for the proposed HMM - defined to be u(t) = c_s(t) - e_t(t-1), where
+% c_s is an element of the control_seq cell obtained from controlSequence.m
+% and e_t is the corresponding element of the second column of eye_tracking
 
 % Inputs:
 
@@ -26,14 +22,15 @@ function [control_seq] = controlSequence(eye_tracking, target_placement)
 
 % Outputs:
 
-% control_seq:      n_experiments by 1 cell, each element of which is an n
-%                   by 2 series of target coordinates for each time stamp
-%                   in the eye-tracking data for that experiment, where n
-%                   is the number of time stamps in the eye-tracking data
+% control_seq:      n_experiments by 1 cell, each element of which is an
+%                   n-1 by 2 series of target coordinates for differenced
+%                   row of eye-tracking data for that experiment, where n
+%                   is the number of time stamps in the (pre-differencing)
+%                   eye-tracking data
 
-% Author:           Sam Parsons
-% Date created:     19/09/2016
-% Last amended:     20/09/2016
+% Author:       Sam Parsons
+% Date created: 20/09/2016
+% Last amended: 20/09/2016
 
 %     *********************************************************************
 %     Check inputs
@@ -91,26 +88,13 @@ function [control_seq] = controlSequence(eye_tracking, target_placement)
 %     *********************************************************************
 
 %     *********************************************************************
-%     Main body of code. For eye tracks recorded before target first
-%     appears, their target taken to be the following eye track. For eye
-%     tracks after target has appeared, their target is taken to be the
-%     most recent location of target_placement
+%     Main body of code. First, the function controlSequence.m is run on
+%     the input arguments. Then each the targets are transformed to their
+%     differenced equivalents control_seq{exp_idx}(t, :) =
+%     control_seq{exp_idx}(t+1, :) - eye_tracking{exp_idx, 2}(t, :)
 
-    control_seq = cell(n_experiments, 1);
-    for exp_idx = 1:n_experiments
-        n_eye_tracks = length(eye_tracking{exp_idx, 1});
-        n_pre_target = sum(eye_tracking{exp_idx, 1} <...
-            target_placement{exp_idx, 1}(1));
-        control_seq{exp_idx} = [eye_tracking{exp_idx, 2}(2:(n_pre_target+1), :);...
-            zeros((n_eye_tracks - n_pre_target), 2)];
-        for eye_track_row_idx = (n_pre_target+1):n_eye_tracks
-            target_control_idx =...
-                find(target_placement{exp_idx, 1} <...
-                eye_tracking{exp_idx, 1}(eye_track_row_idx),...
-                1, 'last');
-            control_seq{exp_idx}(eye_track_row_idx, :) =...
-                target_placement{exp_idx, 2}(target_control_idx, :);
-        end
-    end
-
+    control_seq = controlSequence(eye_tracking, target_placement);
+    control_seq = cellfun(@(eye_tracks_exp, targets_exp)...
+        targets_exp(2:end, :) - eye_tracks_exp(1:(end-1), :),...
+        eye_tracking(:, 2), control_seq, 'UniformOutput', false);
 end
