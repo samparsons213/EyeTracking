@@ -87,11 +87,11 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
     p_ugx = cell(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n = size(control_seq_hmm{exp_idx}, 1);
-        max_norm_u = max(arrayfun(@(row_idx)...
+        median_norm_u = median(arrayfun(@(row_idx)...
             norm(control_seq_hmm{exp_idx}(row_idx, :)), 1:n));
         p_ugx{exp_idx} = cell2mat(arrayfun(@(row_idx)...
             condProbUX(control_seq_hmm{exp_idx}(row_idx, :)', l_dirs,...
-            max_norm_u, epsilon), (1:n)', 'UniformOutput', false));
+            median_norm_u, epsilon), (1:n)', 'UniformOutput', false));
     end
 
 end

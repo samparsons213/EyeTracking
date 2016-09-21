@@ -1,4 +1,4 @@
-function p_ugx = condProbUX(u, l_dirs, max_norm_u, epsilon)
+function p_ugx = condProbUX(u, l_dirs, median_norm_u, epsilon)
 % Returns unnormalised conditional probabilities of the control direction
 % u given each of the latent directions and the 'no movement' latent state
 
@@ -9,8 +9,8 @@ function p_ugx = condProbUX(u, l_dirs, max_norm_u, epsilon)
 % l_dirs:       2 by n array of latent directions, where each column is a
 %               unit vector
 
-% max_norm_u:   positive real number giving the norm of the largest control
-%               direction in the experiment
+% median_norm_u:positive real number giving the median norm of the control
+%               directions in the experiment
 
 % epsilon:      real number in (0, 0.5) giving the closest acceptable
 %               norm-difference (see below) to 0 and 1
@@ -59,11 +59,11 @@ function p_ugx = condProbUX(u, l_dirs, max_norm_u, epsilon)
     if ~all(correct)
         error('all columns in l_dirs must be unit vectors')
     end
-%     max_norm_u must be a positive real scalar, at least as great as ||u||
+%     median_norm_u must be a positive real scalar
     norm_u = norm(u);
-    if ~(isscalar(max_norm_u) && isnumeric(max_norm_u) &&...
-            isreal(max_norm_u) && (max_norm_u >= norm_u))
-        error('max_norm_u must be a positive real scalar')
+    if ~(isscalar(median_norm_u) && isnumeric(median_norm_u) &&...
+            isreal(median_norm_u) && (median_norm_u > 0))
+        error('median_norm_u must be a positive real scalar')
     end
 %     epsilon must be a real scalar in (0, 0.5)
     if ~(isscalar(epsilon) && isnumeric(epsilon) && isreal(epsilon) &&...
@@ -87,7 +87,7 @@ function p_ugx = condProbUX(u, l_dirs, max_norm_u, epsilon)
 %     thresholding as before)
 %     *********************************************************************
 
-    norm_u_ratio = norm_u / max_norm_u;
+    norm_u_ratio = norm_u / median_norm_u;
     u = u ./ norm(u);
     diffs = 0.5 .* arrayfun(@(dir_idx) norm(u - l_dirs(:, dir_idx)),...
         1:size(l_dirs, 2));
