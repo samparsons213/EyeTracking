@@ -11,5 +11,5 @@ process_file_script
 control_seq_hmm = controlSequenceHMM(eye_tracking, target_placing);
 epsilon = 0.01;
 p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon);
-dim_x = size(l_dirs, 2);
+dim_x = size(l_dirs, 2) + 1;
 [p_1, P, emission_means, emission_covs] = generateRandomParameters(dim_x);
