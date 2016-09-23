@@ -9,8 +9,10 @@ first_data_line = 138;
 % tracking data, if line is a target placement then place in target data,
 % otherwise skip line. Line is determined to be an eye track if its length
 % after splitting on ' ' is 5 (timestamp, x, y, dilation, .), and the
-% finial element is a '.'. Line is determined to be a target placement if
-% length after splitting on ' ' is 10, and the fifth element is 'TARET_POS'
+% final element is a '.'. Line is determined to be a target placement if
+% length after splitting on ' ' is 10, and the fifth element is
+% 'TARET_POS'. If a SBLINK (start blink) line is read, don't read eye
+% tracks until an EBLINK (end blink) line is read.
 
 % % cd(file_folder)
 fileID = fopen([file_folder, file_name]);

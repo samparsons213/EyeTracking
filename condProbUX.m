@@ -17,11 +17,11 @@ function p_ugx = condProbUX(u, l_dirs, median_norm_u, epsilon)
 
 % Outputs:
 
-% p_ugx:        1 by (n+1) probability distribution, with the first n
-%               elements giving the unnormalised conditional probability of
-%               the corresponding column of l_dirs given the control
-%               direction u, and the last element giving the unnormalised
-%               probability for the 'no movement' latent state. Note that
+% p_ugx:        1 by (n+1) probability distribution, with the first element
+%               giving the unnormalised probability for the 'no movement'
+%               latent state, and the last n elements giving the
+%               unnormalised conditional probability of the corresponding
+%               column of l_dirs given the control direction u. Note that
 %               this is not itself an unnormalised distribution, rather
 %               each element comes from an unnormalised distribution
 
@@ -91,7 +91,7 @@ function p_ugx = condProbUX(u, l_dirs, median_norm_u, epsilon)
     u = u ./ norm(u);
     diffs = 0.5 .* arrayfun(@(dir_idx) norm(u - l_dirs(:, dir_idx)),...
         1:size(l_dirs, 2));
-    exp_scores = [diffs, norm_u_ratio];
+    exp_scores = [norm_u_ratio, diffs];
     exp_scores = max(epsilon, exp_scores);
     exp_scores = min(1-epsilon, exp_scores);
     p_ugx = -log(exp_scores);
