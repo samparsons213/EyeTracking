@@ -30,7 +30,7 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 
 % Author:       Sam Parsons
 % Date created: 21/09/2016
-% Last amended: 21/09/2016
+% Last amended: 23/09/2016
 
 %     *********************************************************************
 %     Check input arguments
@@ -80,10 +80,15 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 %     *********************************************************************
 %     Main body of code. For each experiment, the norm of the largest
 %     control direction is found. Then, the function condProbUX.m is run on
-%     each row of control_seq_hmm{exp_idx} in turn with max_norm_u constant
-%     inside each experiment
+%     each row of control_seq_hmm{exp_idx} in turn with median_norm_u
+%     constant inside each experiment. The normaliser of the conditional
+%     densities p(u | x) for x = 2,...,(dim_x+1) (i.e. movement states) is
+%     calculated here as 
+%     integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, 2*pi) = 6.5328
+%     (4 d.p.)
 %     *********************************************************************
 
+    movement_z = integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, 2*pi);
     p_ugx = cell(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n = size(control_seq_hmm{exp_idx}, 1);
@@ -91,7 +96,8 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
             norm(control_seq_hmm{exp_idx}(row_idx, :)), 1:n));
         p_ugx{exp_idx} = cell2mat(arrayfun(@(row_idx)...
             condProbUX(control_seq_hmm{exp_idx}(row_idx, :)', l_dirs,...
-            median_norm_u, epsilon), (1:n)', 'UniformOutput', false));
+            median_norm_u, movement_z, epsilon), (1:n)', 'UniformOutput',...
+            false));
     end
 
 end
