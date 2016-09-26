@@ -138,8 +138,21 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
     for iter = 1:n_iters
         fprintf('EM iteration %d\n', iter)
         old_parms = [pi_1(:); P(:); emission_means(:); emission_covs(:)];
-        [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
-            emission_means, emission_covs, zero_probs);
+        fb_completed = false;
+        while ~fb_completed
+            fb_completed = true;
+            try
+                [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
+                    emission_means, emission_covs, zero_probs);
+            catch ME
+                fprintf('\tforwardBackward.m failed. Re-initialising emission_covs and trying again\n')
+                fb_completed = false;
+                emission_covs = randn(2, 2, s_y(3));
+                emission_covs = cell2mat(arrayfun(@(x_idx)...
+                    emission_covs(:, :, x_idx) * emission_covs(:, :, x_idx)',...
+                    reshape(1:s_y(3), 1, 1, s_y(3)), 'UniformOutput', false));
+            end
+        end
         [pi_1, P, emission_means, emission_covs] =...
             optimiseParameters(y, p_x, p_x_x_next);
         delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:);...

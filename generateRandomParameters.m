@@ -2,9 +2,8 @@ function [pi_1, P, emission_means, emission_covs] =...
     generateRandomParameters(dim_x, alpha)
 % Returns randomly initialised parameters for the proposed HMM, taking one
 % hyperparameter as input for producing random probability distributions.
-% Random covariance matrices are generated as Wishart_2(2, V) for some
-% randomly generated V. V is distributed Wishart_2(2, I./sqrt(2)), giving
-% it mean E[V] = I.
+% Random covariance matrices are generated as Wishart_2(2, I), thereby
+% having E[emission_covs(:, :, i)] = 2I for all i
 
 % Inputs:
 
@@ -67,9 +66,7 @@ function [pi_1, P, emission_means, emission_covs] =...
     P = bsxfun(@rdivide, random_gammas(2:end, :),...
         sum(random_gammas(2:end, :), 2));
     emission_means = randn(1, 2, dim_x);
-    V = randn(2) ./ sqrt(2);
-    chol_V = chol(V' * V, 'lower');
-    emission_covs = reshape(chol_V * randn(2, 2*dim_x), 2, 2, dim_x);
+    emission_covs = randn(2, 2, dim_x);
     emission_covs = cell2mat(arrayfun(@(x_idx)...
         emission_covs(:, :, x_idx) * emission_covs(:, :, x_idx)',...
         reshape(1:dim_x, 1, 1, dim_x), 'UniformOutput', false));
