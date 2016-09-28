@@ -1,12 +1,16 @@
-function [control_seq] = controlSequence(eye_tracking, target_placement)
-% Takes a sequence of eye tracking data, and a sequence of target
-% placements for the data, and returns the sequence of target locations for
-% each time stamp of the data.
+function [control_seq, n_pre_target] = controlSequence(eye_tracking,...
+    target_placement)
+% Takes a cell array of sequences of eye tracking data, and a cell array of
+% sequences of target placements for the data, and returns the sequence of
+% target locations for each time stamp of the data after the first target
+% has been placed.
 
 % The elements of the original data sequence prior to the target first
-% appearing have their corresponding control sequence elements set to the
-% next observed eye tracking location, i.e. u(1) = y(2) where u(t) is the
-% control at time t, and y(t) is the eye tracking data at time t.
+% appearing are ignored, so data for each experiment is synchronised across
+% people. Each element of control_seq is therefore generally shorter than
+% the corresponding element of eye_tracking, and the relation
+% control_seq{i} = eye_tracking{i, 2}((n+1):end, :) where n is the number of
+% eye tracks recorded before the first target is placed.
 
 % Inputs:
 
@@ -28,12 +32,18 @@ function [control_seq] = controlSequence(eye_tracking, target_placement)
 
 % control_seq:      n_experiments by 1 cell, each element of which is an n
 %                   by 2 series of target coordinates for each time stamp
-%                   in the eye-tracking data for that experiment, where n
-%                   is the number of time stamps in the eye-tracking data
+%                   in the eye-tracking data for that experiment after the
+%                   first target has been placed, where n is the number of
+%                   time stamps in the eye-tracking data after the first
+%                   target has been placed
+
+% n_pre_target:     n_experiments by 1 array of row indices corresponding
+%                   to the first row of each experiment in eye_tracking
+%                   that occurs after the first target has been placed
 
 % Author:           Sam Parsons
 % Date created:     19/09/2016
-% Last amended:     20/09/2016
+% Last amended:     27/09/2016
 
 %     *********************************************************************
 %     Check inputs
@@ -95,21 +105,29 @@ function [control_seq] = controlSequence(eye_tracking, target_placement)
 %     appears, their target taken to be the following eye track. For eye
 %     tracks after target has appeared, their target is taken to be the
 %     most recent location of target_placement
+%     *********************************************************************
 
     control_seq = cell(n_experiments, 1);
+    n_pre_target = zeros(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n_eye_tracks = length(eye_tracking{exp_idx, 1});
-        n_pre_target = sum(eye_tracking{exp_idx, 1} <...
+        n_pre_target(exp_idx) = sum(eye_tracking{exp_idx, 1} <...
             target_placement{exp_idx, 1}(1));
-        control_seq{exp_idx} = [eye_tracking{exp_idx, 2}(2:(n_pre_target+1), :);...
-            zeros((n_eye_tracks - n_pre_target), 2)];
-        for eye_track_row_idx = (n_pre_target+1):n_eye_tracks
+        control_seq{exp_idx} =...
+            zeros((n_eye_tracks - n_pre_target(exp_idx)), 2);
+        for eye_track_row_idx = 1:(n_eye_tracks - n_pre_target(exp_idx))
             target_control_idx =...
-                find(target_placement{exp_idx, 1} <...
-                eye_tracking{exp_idx, 1}(eye_track_row_idx),...
-                1, 'last');
-            control_seq{exp_idx}(eye_track_row_idx, :) =...
-                target_placement{exp_idx, 2}(target_control_idx, :);
+                find(target_placement{exp_idx, 1} <=...
+                eye_tracking{exp_idx, 1}(eye_track_row_idx +...
+                n_pre_target(exp_idx)), 1, 'last');
+            try
+                control_seq{exp_idx}(eye_track_row_idx, :) =...
+                    target_placement{exp_idx, 2}(target_control_idx, :);
+            catch ME
+                fprintf('experiment: %d, eye_row_idx: %d target_row_idx: %d\n',...
+                    exp_idx, eye_track_row_idx, target_control_idx)
+                rethrow ME
+            end
         end
     end
 
