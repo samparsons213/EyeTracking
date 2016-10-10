@@ -51,16 +51,15 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 
 % Author:           Sam Parsons
 % Date created:     22/09/2016
-% Last amended:     22/09/2016
+% Last amended:     27/09/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-%     All  arguments must be input
-    if nargin < 7
-        error('all 7 arguments must be input')
+    if nargin < 8
+        error('all 8 arguments must be input')
     end
 %     y must be a [n 2 m+1] real array
     s_y = size(y);
@@ -98,19 +97,12 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
         error('emission_means must be a real array of equal size to y')
     end
 %     emission_covs must be [2 2 m+1] array of real covariance matrices.
-%     Symmetric positive definiteness is tested in forwardOneStep.m
+%     Symmetric positive definiteness is tested in forwardBackward.m
     if ~(isnumeric(emission_covs) && isreal(emission_covs) &&...
             (ndims(emission_covs) == 3) &&...
             all(size(emission_covs) == [2 2 s_y(3)]))
         err_msg = ['emission_covs must be [2 2 size(y, 3)]',...
             ' array of real numbers'];
-        error(err_msg)
-    end
-    spd = arrayfun(@(ld_idx) issymmetric(emission_covs(:, :, ld_idx)) &&...
-        all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
-    if ~all(spd)
-        err_msg = ['all submatrices of emission covs must be symmetric',...
-            ' positive definite'];
         error(err_msg)
     end
 %     zero_probs must be [n m+1] binary array
@@ -147,17 +139,21 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
             catch ME
                 fprintf('\tforwardBackward.m failed. Re-initialising emission_covs and trying again\n')
                 fb_completed = false;
-                emission_covs = randn(2, 2, s_y(3));
-                emission_covs = cell2mat(arrayfun(@(x_idx)...
-                    emission_covs(:, :, x_idx) * emission_covs(:, :, x_idx)',...
-                    reshape(1:s_y(3), 1, 1, s_y(3)), 'UniformOutput', false));
+                [pi_1, P, emission_means, emission_covs] = generateRandomParameters(s_y(3));
+%                 emission_covs = randn(2, 2, s_y(3));
+%                 emission_covs = cell2mat(arrayfun(@(x_idx)...
+%                     emission_covs(:, :, x_idx) * emission_covs(:, :, x_idx)',...
+%                     reshape(1:s_y(3), 1, 1, s_y(3)), 'UniformOutput', false));
             end
         end
         [pi_1, P, emission_means, emission_covs] =...
             optimiseParameters(y, p_x, p_x_x_next);
-        delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
+        mean_delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
             emission_covs(:)]));
-        fprintf('\tdelta = %f\n', delta)
+        max_delta = max(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
+            emission_covs(:)]));
+        fprintf('\tmean |delta| = %f\tmax |delta| = %f\n', mean_delta,...
+            max_delta)
     end
 
 end

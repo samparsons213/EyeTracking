@@ -46,7 +46,7 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
 
 % Author:           Sam Parsons
 % Date created:     22/09/2016
-% Last amended:     22/09/2016
+% Last amended:     27/09/2016
 
 %     *********************************************************************
 %     Check input arguments
@@ -92,7 +92,6 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
         error('emission_means must be a real array of equal size to y')
     end
 %     emission_covs must be [2 2 m+1] array of real covariance matrices.
-%     Symmetric positive definiteness is tested in forwardOneStep.m
     if ~(isnumeric(emission_covs) && isreal(emission_covs) &&...
             (ndims(emission_covs) == 3) &&...
             all(size(emission_covs) == [2 2 s_y(3)]))

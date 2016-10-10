@@ -1,7 +1,7 @@
 function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
-% Returns the unnormalised posterior probabilities of the each element in
-% the control sequence given each canonical latent direction for each
-% (differenced) time step in each experiment for one person's data
+% Returns the posterior densities of each element in the control sequence
+% given each canonical latent direction for each (differenced) time step in
+% each experiment for one person's data
 
 % Inputs:
 
@@ -19,26 +19,26 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 % Outputs:
 
 % p_ugx:            n_experiments by 1 cell, each element of which is an n
-%                   by m+1 array of unnormalised conditional probabilities
-%                   (first m columns relate to corresponding columns in
-%                   l_dirs, last column relates to 'no movement' latent
-%                   state) (n not same across experiments, equal to n in
+%                   by m+1 array of conditional densities
+%                   (first column relates to 'no movement' latent state,
+%                   last m columns relate to corresponding columns in
+%                   l_dirs) (n not same across experiments, equal to n in
 %                   control_seq_hmm for each experiment). Note that each
 %                   row in each cell does ***not*** represent one
 %                   unnormalised distribution, but each element of the row
-%                   is from a different unnormalised distribution
+%                   is from a different conditional density
 
 % Author:       Sam Parsons
 % Date created: 21/09/2016
-% Last amended: 23/09/2016
+% Last amended: 27/09/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 2
-        error('both arguments must be input')
+    if nargin < 3
+        error('all 3 arguments must be input')
     end
 %     control_seq_hmm must conform to the output of controlSequenceHMM.m
     if ~(iscell(control_seq_hmm) && iscolumn(control_seq_hmm))
