@@ -43,7 +43,7 @@ function viterbi_path = viterbiPath(y, p_ugx, pi_1, P, emission_means,...
 
 % Author:           Sam Parsons
 % Date created:     23/09/2016
-% Last amended:     23/09/2016
+% Last amended:     05/10/2016
 
 %     *********************************************************************
 %     Check inputs
@@ -97,7 +97,8 @@ function viterbi_path = viterbiPath(y, p_ugx, pi_1, P, emission_means,...
             ' array of real numbers'];
         error(err_msg)
     end
-    spd = arrayfun(@(ld_idx) issymmetric(emission_covs(:, :, ld_idx)) &&...
+    spd = arrayfun(@(ld_idx)...
+        (norm(emission_covs(:, :, ld_idx) - emission_covs(:, :, ld_idx)') < num_tol) &&...
         all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
     if ~all(spd)
         err_msg = ['all submatrices of emission covs must be symmetric',...
@@ -140,7 +141,8 @@ function viterbi_path = viterbiPath(y, p_ugx, pi_1, P, emission_means,...
             1:s_y(3));
         log_emission_densities = -(mahanalobis + log_cov_dets) ./ 2;
         log_emission_densities(~zero_probs(t, :)) = -Inf;
-        V = log_P + bsxfun(@plus, V', log_emission_densities + p_ugx(t, :));
+        V = log_P +...
+            bsxfun(@plus, V', log_emission_densities + log(p_ugx(t, :)));
         [V, W(t-1, :)] = max(V, [], 1);
     end
     
