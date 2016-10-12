@@ -1,5 +1,5 @@
 function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
-    emission_means, emission_covs, zero_probs, n_iters)
+    emission_means, emission_covs, zero_probs, n_iters, epsilon, min_eig)
 % Performs n_iters iterations of EM on one person's data for one experiment
 
 % Inputs:
@@ -35,6 +35,12 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 % n_iters:          positive integer giving number of iterations of EM to
 %                   run
 
+% epsilon:          positive real number giving convergence criteria for
+%                   parameters
+
+% min_eig:          positive real number giving the minimum acceptable
+%                   eigenvalue  of estimated covariance matrices
+
 % Outputs:
 
 % pi_1:             1 by (m+1) probability distribution (sums to 1) giving
@@ -58,8 +64,8 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 8
-        error('all 8 arguments must be input')
+    if nargin < 10
+        error('all 10 arguments must be input')
     end
 %     y must be a [n 2 m+1] real array
     s_y = size(y);
@@ -116,6 +122,16 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
             (n_iters == round(n_iters)) && (n_iters > 0))
         error('n_iters must be a positive integer')
     end
+%     epsilon must be a positive real number
+    if ~(isnumeric(epsilon) && isreal(epsilon) && isscalar(epsilon) &&...
+            (epsilon > 0))
+        error('epsilon must be a positive real number')
+    end
+%     min_eig must be a positive real number
+    if ~(isnumeric(min_eig) && isreal(min_eig) && isscalar(min_eig) &&...
+            (min_eig > 0))
+        error('min_eig must be a positive real number')
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -139,21 +155,21 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
             catch ME
                 fprintf('\tforwardBackward.m failed. Re-initialising emission_covs and trying again\n')
                 fb_completed = false;
-                [pi_1, P, emission_means, emission_covs] = generateRandomParameters(s_y(3));
-%                 emission_covs = randn(2, 2, s_y(3));
-%                 emission_covs = cell2mat(arrayfun(@(x_idx)...
-%                     emission_covs(:, :, x_idx) * emission_covs(:, :, x_idx)',...
-%                     reshape(1:s_y(3), 1, 1, s_y(3)), 'UniformOutput', false));
+                [pi_1, P, emission_means, emission_covs] =...
+                    generateRandomParameters(y, zero_probs);
             end
         end
         [pi_1, P, emission_means, emission_covs] =...
-            optimiseParameters(y, p_x, p_x_x_next);
+            optimiseParameters(y, p_x, p_x_x_next, min_eig);
         mean_delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
             emission_covs(:)]));
         max_delta = max(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
             emission_covs(:)]));
         fprintf('\tmean |delta| = %f\tmax |delta| = %f\n', mean_delta,...
             max_delta)
+        if max_delta < epsilon
+            break
+        end
     end
 
 end
