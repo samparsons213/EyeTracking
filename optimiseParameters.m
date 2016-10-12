@@ -1,5 +1,5 @@
 function [pi_1, P, emission_means, emission_covs] =...
-    optimiseParameters(y, p_x, p_x_x_next)
+    optimiseParameters(y, p_x, p_x_x_next, min_eig)
 % Returns the parameters that maximise the expected total log-likelihood,
 % maximisation step of EM
 
@@ -35,15 +35,15 @@ function [pi_1, P, emission_means, emission_covs] =...
 
 % Author:           Sam Parsons
 % Date created:     22/09/2016
-% Last amended:     22/09/2016
+% Last amended:     07/10/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 3
-        error('all 3 arguments must be input')
+    if nargin < 4
+        error('all 4 arguments must be input')
     end
 %     y must be a [n 2 m+1] real array
     s_y = size(y);
@@ -76,6 +76,11 @@ function [pi_1, P, emission_means, emission_covs] =...
     if ~all(is_prob_dist)
         error('all matrices of p_x_x_next must be probability distributions')
     end
+%     min_eig must be a positive real number
+    if ~(isnumeric(min_eig) && isreal(min_eig) && isscalar(min_eig) &&...
+            (min_eig > 0))
+        error('min_eig must be a positive real number')
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -104,6 +109,11 @@ function [pi_1, P, emission_means, emission_covs] =...
     diffs_sq = cell2mat(reshape(diffs_sq, 1, 1, s_y(1), s_y(3)));
     weights = reshape(weights, 1, 1, s_y(1), s_y(3));
     emission_covs = squeeze(sum(bsxfun(@times, diffs_sq, weights), 3));
+    for x_idx = 1:s_y(3)
+        [V, D] = eig(emission_covs(:, :, x_idx));
+        D = diag(max(diag(D), min_eig));
+        emission_covs(:, :, x_idx) = V * D * V';
+    end
     fprintf('\tOptimising parameters completed.\n')
 
 end
