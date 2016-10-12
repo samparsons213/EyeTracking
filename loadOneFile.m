@@ -40,9 +40,15 @@ function [eye_tracking_data, target_data] = loadOneFile(file_folder,...
 %     again. Finally, the file is run through one last time, this time
 %     recording the eye track events and the target events.
 %     
-%     Note that blinking is accounted for by the SBLINK (L/R) and EBLINK
-%     (L/R) lines. When a blink is happening, eye tracking data is not
-%     recorded for its duration.
+%     Note that as blinking is not perfectly accounted for by the SBLINK
+%     (L/R) and EBLINK (L/R) lines, a more pragmatic approach is taken to
+%     identifying them. A blink is defined as any line(s) where
+%     any(isnan(str2double(new_line(2:3)))) == 1. During each blink, the
+%     eye tracking data for the times immediately previous and subsequent
+%     are linearly interpolated between to obtain estimates of the eye
+%     positions at each blink time stamp. Rows which have any(isnan(...
+%     that come before the first correctly recorded row, or after the last
+%     one, are ignored.
 %     *********************************************************************
 
     fileID = fopen([file_folder, file_name]);
@@ -67,46 +73,53 @@ function [eye_tracking_data, target_data] = loadOneFile(file_folder,...
     target_data = cell(n_experiments, 2);
     n_eye_tracks = zeros(n_experiments, 1);
     n_targets = zeros(n_experiments, 1);
+    n_blinks = zeros(n_experiments, 1);
+    any_nan = false(2, 1);
 %     Count data events for each experiment
     fprintf('Counting number of data events in each experiment...\n')
     frewind(fileID)
     experiment_idx = 0;
-    blink = false;
     while ~feof(fileID)
         new_line = fgetl(fileID);
         new_line = strsplit(new_line);
         if strcmp(new_line{1}, 'START')
             experiment_idx = experiment_idx + 1;
-            switch new_line{3}
-                case 'LEFT'
-                    eye_lr = 'L';
-                case 'RIGHT'
-                    eye_lr = 'R';
+            tracking_started = false;
+        end
+        end_line = new_line{end};
+        is_data_line = ~isempty(end_line) &&...
+            all(arrayfun(@(idx) strcmp(end_line(idx), '.'),...
+            1:length(end_line)));
+% %         (strcmp(new_line{end}, '.') || strcmp(new_line{end}, '...'))
+        if is_data_line
+            any_nan(1) = any(isnan(str2double(new_line(2:3))));
+            if ~any_nan(1) && (n_eye_tracks(experiment_idx) == 0)
+                tracking_started = true;
             end
-        end
-        if strcmp(new_line{1}, 'SBLINK') && strcmp(new_line{2}, eye_lr)
-            blink = true;
-        end
-        if strcmp(new_line{1}, 'EBLINK') && strcmp(new_line{2}, eye_lr)
-            blink = false;
-        end
-        if (strcmp(new_line{end}, '.') || strcmp(new_line{end}, '...')) &&...
-                ~blink
-            if ~any(isnan(str2double(new_line(2:3))))
+            if tracking_started
                 n_eye_tracks(experiment_idx) = n_eye_tracks(experiment_idx) + 1;
+                if any_nan(1) && ~any_nan(2)
+                    n_blinks(experiment_idx) = n_blinks(experiment_idx) + 1;
+                end
             end
         end
+        any_nan(2) = any_nan(1);
         if (length(new_line) == 10) && strcmp(new_line{5}, 'TARGET_POS')
             n_targets(experiment_idx) = n_targets(experiment_idx) + 1;
         end
     end
     for experiment_idx = 1:n_experiments
-        fprintf('\tThere were %d eye tracks and %d target placements in experiment %d\n',...
-            n_eye_tracks(experiment_idx), n_targets(experiment_idx), experiment_idx)
-        eye_tracking_data{experiment_idx, 1} = zeros(n_eye_tracks(experiment_idx), 1);
-        eye_tracking_data{experiment_idx, 2} = zeros(n_eye_tracks(experiment_idx), 2);
-        target_data{experiment_idx, 1} = zeros(n_targets(experiment_idx), 1);
-        target_data{experiment_idx, 2} = zeros(n_targets(experiment_idx), 2);
+        fprintf('\tThere were %d eye tracks, %d blinks, and %d target placements in experiment %d\n',...
+            n_eye_tracks(experiment_idx), n_blinks(experiment_idx),...
+            n_targets(experiment_idx), experiment_idx)
+        eye_tracking_data{experiment_idx, 1} =...
+            zeros(n_eye_tracks(experiment_idx), 1);
+        eye_tracking_data{experiment_idx, 2} =...
+            zeros(n_eye_tracks(experiment_idx), 2);
+        target_data{experiment_idx, 1} =...
+            zeros(n_targets(experiment_idx), 1);
+        target_data{experiment_idx, 2} =...
+            zeros(n_targets(experiment_idx), 2);
     end
 %     Record data
     fprintf('Extracting data events for each experiment from file...\n')
@@ -114,41 +127,50 @@ function [eye_tracking_data, target_data] = loadOneFile(file_folder,...
     experiment_idx = 0;
     eye_tracking_row_idx = 0;
     target_row_idx = 0;
-    blink = false;
+    blink_details = cell(n_experiments, 1);
     while ~feof(fileID)
         new_line = fgetl(fileID);
         new_line = strsplit(new_line);
         if strcmp(new_line{1}, 'START')
             experiment_idx = experiment_idx + 1;
+            tracking_started = false;
             eye_tracking_row_idx = 0;
             target_row_idx = 0;
-            switch new_line{3}
-                case 'LEFT'
-                    eye_lr = 'L';
-                case 'RIGHT'
-                    eye_lr = 'R';
+            blink_details{experiment_idx} =...
+                [zeros(n_blinks(experiment_idx), 1),...
+                ones(n_blinks(experiment_idx), 1)];
+            blink_idx = 0;
+            any_nan = false(2, 1);
+        end
+        end_line = new_line{end};
+        is_data_line = ~isempty(end_line) &&...
+            all(arrayfun(@(idx) strcmp(end_line(idx), '.'),...
+            1:length(end_line)));
+% %         (strcmp(new_line{end}, '.') || strcmp(new_line{end}, '...'))
+        if is_data_line
+            any_nan(1) = any(isnan(str2double(new_line(2:3))));
+            if ~any_nan(1) && (eye_tracking_row_idx == 0)
+                tracking_started = true;
             end
-        end
-        if strcmp(new_line{1}, 'SBLINK') && strcmp(new_line{2}, eye_lr)
-            blink = true;
-        end
-        if strcmp(new_line{1}, 'EBLINK') && strcmp(new_line{2}, eye_lr)
-            blink = false;
-        end
-        if (strcmp(new_line{end}, '.') || strcmp(new_line{end}, '...')) &&...
-                ~blink
-            if ~any(isnan(str2double(new_line(2:3))))
+            if tracking_started
                 eye_tracking_row_idx = eye_tracking_row_idx + 1;
+                if any_nan(1)
+                    if ~any_nan(2)
+                        blink_idx = blink_idx + 1;
+                        blink_details{experiment_idx}(blink_idx, 1) =...
+                            eye_tracking_row_idx;
+                    else
+                        blink_details{experiment_idx}(blink_idx, 2) =...
+                            blink_details{experiment_idx}(blink_idx, 2) + 1;
+                    end
+                end
                 eye_tracking_data{experiment_idx, 1}(eye_tracking_row_idx) =...
                     str2double(new_line{1});
-                eye_tracking_data{experiment_idx, 2}(eye_tracking_row_idx, 1) =...
-                    str2double(new_line{2});
-                eye_tracking_data{experiment_idx, 2}(eye_tracking_row_idx, 2) =...
-                    str2double(new_line{3});
-            else
-                fprintf('*** Row with NaNs but no blink recorded ***\n')
+                eye_tracking_data{experiment_idx, 2}(eye_tracking_row_idx, :) =...
+                    str2double(new_line(2:3));
             end
         end
+        any_nan(2) = any_nan(1);
         if (length(new_line) == 10) && strcmp(new_line{5}, 'TARGET_POS')
             target_row_idx = target_row_idx + 1;
             target_data{experiment_idx, 1}(target_row_idx) =...
@@ -157,6 +179,31 @@ function [eye_tracking_data, target_data] = loadOneFile(file_folder,...
                 str2double(new_line{7}(2:(end-1)));
             target_data{experiment_idx, 2}(target_row_idx, 2) =...
                 str2double(new_line{8}(1:(end-1)));
+        end
+    end
+%     retrospective blink interpolation
+    for experiment_idx = 1:n_experiments
+        for blink_idx = 1:n_blinks(experiment_idx)
+            blink_start = blink_details{experiment_idx}(blink_idx, 1);
+            blink_stop = blink_details{experiment_idx}(blink_idx, 1) +...
+                blink_details{experiment_idx}(blink_idx, 2) - 1;
+            pre_blink =...
+                eye_tracking_data{experiment_idx, 2}((blink_start-1), :);
+            if blink_stop < length(eye_tracking_data{experiment_idx, 1})
+                post_blink =...
+                    eye_tracking_data{experiment_idx, 2}((blink_stop+1), :);
+                blink_length = blink_details{experiment_idx}(blink_idx, 2);
+                for blink_idx2 = 0:(blink_length-1)
+                    eye_tracking_data{experiment_idx, 2}((blink_start+blink_idx2), :) =...
+                        pre_blink +...
+                        ((blink_idx2+1)/(blink_length+1)) .* (post_blink-pre_blink);
+                end
+            else
+                eye_tracking_data{experiment_idx, 1} =...
+                    eye_tracking_data{experiment_idx, 1}(1:(blink_start-1));
+                eye_tracking_data{experiment_idx, 2} =...
+                    eye_tracking_data{experiment_idx, 2}(1:(blink_start-1), :);
+            end
         end
     end
     fprintf('\tData extraction completed\n')
