@@ -30,7 +30,7 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 
 % Author:       Sam Parsons
 % Date created: 21/09/2016
-% Last amended: 27/09/2016
+% Last amended: 05/10/2016
 
 %     *********************************************************************
 %     Check input arguments
@@ -52,7 +52,7 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
         (size(control_seq_hmm{exp_idx}, 2) == 2), 1:n_experiments);
     if ~all(correct)
         err_msg = ['each element of control_seq_hmm must be a real matrix',...
-            'with 2 columns and at least 1 row'];
+            ' with 2 columns and at least 1 row'];
         error(err_msg)
     end
 %     l_dirs must be a [2 n] numeric array for some n
@@ -88,7 +88,7 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 %     (4 d.p.)
 %     *********************************************************************
 
-    movement_z = integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, 2*pi);
+    movement_z = integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, pi);
     p_ugx = cell(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n = size(control_seq_hmm{exp_idx}, 1);
