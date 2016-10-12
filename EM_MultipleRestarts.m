@@ -1,5 +1,5 @@
 function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
-    p_ugx, zero_probs, n_iters, n_restarts)
+    p_ugx, zero_probs, n_iters, n_restarts, epsilon, min_eig)
 % Performs n_iters iterations of EM on one person's data for one experiment
 
 % Inputs:
@@ -26,6 +26,12 @@ function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
 % n_restarts:       positive integer giving number of restarts of EM
 %                   procedure
 
+% epsilon:          positive real number giving convergence criteria for
+%                   parameters
+
+% min_eig:          positive real number giving the minimum acceptable
+%                   eigenvalue  of estimated covariance matrices
+
 % Outputs:
 
 % pi_1:             1 by (m+1) probability distribution (sums to 1) giving
@@ -42,16 +48,15 @@ function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
 
 % Author:           Sam Parsons
 % Date created:     22/09/2016
-% Last amended:     22/09/2016
+% Last amended:     07/10/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-%     All  arguments must be input
-    if nargin < 5
-        error('all 5 arguments must be input')
+    if nargin < 7
+        error('all 7 arguments must be input')
     end
 %     y must be a [n 2 m+1] real array
     s_y = size(y);
@@ -81,6 +86,16 @@ function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
             (n_restarts == round(n_restarts)) && (n_restarts > 0))
         error('n_restarts must be a positive integer')
     end
+%     epsilon must be a positive real number
+    if ~(isnumeric(epsilon) && isreal(epsilon) && isscalar(epsilon) &&...
+            (epsilon > 0))
+        error('epsilon must be a positive real number')
+    end
+%     min_eig must be a positive real number
+    if ~(isnumeric(min_eig) && isreal(min_eig) && isscalar(min_eig) &&...
+            (min_eig > 0))
+        error('min_eig must be a positive real number')
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -88,7 +103,7 @@ function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
 %     parameters from those found at each restart.
 %     *********************************************************************
 
-    likelihoods = zeros(1, n_restarts);
+    log_likelihoods = zeros(1, n_restarts);
     pi_1 = zeros(n_restarts, s_y(3));
     P = zeros(s_y(3), s_y(3), n_restarts);
     emission_means = zeros(n_restarts, 2, s_y(3));
@@ -99,23 +114,26 @@ function [pi_1, P, emission_means, emission_covs] = EM_MultipleRestarts(y,...
         [pi_1(restart_idx, :), P(:, :, restart_idx),...
             emission_means(restart_idx, :, :),...
             emission_covs(:, :, :, restart_idx)] =...
-            generateRandomParameters(s_y(3));
+            generateRandomParameters(y, zero_probs);
         [pi_1(restart_idx, :), P(:, :, restart_idx),...
             emission_means(restart_idx, :, :),...
             emission_covs(:, :, :, restart_idx)] = EM(y, p_ugx,...
             pi_1(restart_idx, :), P(:, :, restart_idx),...
             emission_means(restart_idx, :, :),...
-            emission_covs(:, :, :, restart_idx), zero_probs, n_iters);
-        p_x = forwardBackward(y, p_ugx, pi_1(restart_idx, :),...
+            emission_covs(:, :, :, restart_idx), zero_probs, n_iters,...
+            epsilon, min_eig);
+% % %         p_x = priorMarginals(pi_1(restart_idx, :), P(:, :, restart_idx),...
+% % %             s_y(1));
+        log_likelihoods(restart_idx) = logLikelihood(y, pi_1(restart_idx, :),...
             P(:, :, restart_idx), emission_means(restart_idx, :, :),...
             emission_covs(:, :, :, restart_idx), zero_probs);
-        conditional_likelhoods = cell2mat(arrayfun(@(x_idx)...
-            mvnpdf(y(:, :, x_idx), emission_means(restart_idx, :, x_idx),...
-            emission_covs(:, :, x_idx, restart_idx)), 1:s_y(3),...
-            'UniformOutput', false));
-        likelihoods(restart_idx) = sum(p_x(:) .* conditional_likelhoods(:));
+% % %         conditional_likelhoods = cell2mat(arrayfun(@(x_idx)...
+% % %             mvnpdf(y(:, :, x_idx), emission_means(restart_idx, :, x_idx),...
+% % %             emission_covs(:, :, x_idx, restart_idx)), 1:s_y(3),...
+% % %             'UniformOutput', false));
+% % %         log_likelihoods(restart_idx) = sum(p_x(:) .* conditional_likelhoods(:));
     end
-    [~, most_likely] = max(likelihoods);
+    [~, most_likely] = max(log_likelihoods);
     pi_1 = pi_1(most_likely, :);
     P = P(:, :, most_likely);
     emission_means = emission_means(most_likely, :, :);
