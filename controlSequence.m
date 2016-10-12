@@ -111,8 +111,13 @@ function [control_seq, n_pre_target] = controlSequence(eye_tracking,...
     n_pre_target = zeros(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n_eye_tracks = length(eye_tracking{exp_idx, 1});
-        n_pre_target(exp_idx) = sum(eye_tracking{exp_idx, 1} <...
-            target_placement{exp_idx, 1}(1));
+        try
+            n_pre_target(exp_idx) = sum(eye_tracking{exp_idx, 1} <...
+                target_placement{exp_idx, 1}(1));
+        catch ME
+            fprintf('failed at experiment %d\n', exp_idx)
+            rethrow ME
+        end
         control_seq{exp_idx} =...
             zeros((n_eye_tracks - n_pre_target(exp_idx)), 2);
         for eye_track_row_idx = 1:(n_eye_tracks - n_pre_target(exp_idx))
