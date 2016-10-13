@@ -1,6 +1,12 @@
-function [y, zero_prob] = yTransformHMM(y, l_dirs, orth_l_dirs)
+function [y, zero_prob] = yTransformHMM(y, l_dirs, orth_l_dirs, diff_length)
 % Transforms the T by 2 eye tracking data for each experiment for one
-% person into the form needed for inference in the proposed HMM.
+% person into the form needed for inference in the proposed HMM. Difference
+% vectors of a specified size are computed from eye_tracking data, and
+% projected onto the orthogonal basis implied by each canonical direction
+% in l_dirs. When the projection onto the primary basis vector (i.e. the
+% canonical direction itself) for each basis is non-positive, the
+% corresponding element of the logical array zero_prob is set to false to
+% indicate that its corresponding emission density is 0.
 
 % Inputs:
 
@@ -13,46 +19,54 @@ function [y, zero_prob] = yTransformHMM(y, l_dirs, orth_l_dirs)
 % orth_l_dirs:  2 by n array of vectors orthogonal to each of the canonical
 %               latent directions, where each column is a unit vector
 
+% diff_length:  positive integer giving the gaps between eye tracks for
+%               computing difference vectors, e.g. if diff_length = 3 and
+%               T = 7 for some element i of y, then the difference vectors
+%               (prior to any transformations) would be
+%               y{i}(4, :) - y{i}(1, :); y{i}(7, :)-y{i}(4, :). If not
+%               input then its default value is 1
+
 % Outputs:
 
-% y:            n_experiments by 1 cell, where each element is a (T-1) by 2
-%               by (n+1) array of transformed difference vectors
+% y:            n_experiments by 1 cell, where each element is a (x-1) by 2
+%               by (n+1) array of transformed difference vectors, where
+%               x=length(1:diff_length:T)=1+floor((T-1)/diff_length)
 
-% zero_prob:    n_experiments by 1 cell, where each element is a (T-1) by n
+% zero_prob:    n_experiments by 1 cell, where each element is a (x-1) by n
 %               binary array, where zeros correspond to zero posterior
 %               probability for that direction at that time, and ones
 %               correspond to positive posterior probability for that
-%               direction at that time
+%               direction at that time, and x is as in y above
 
 % Author:       Sam Parsons
 % Date created: 20/09/2016
-% Last amended: 20/09/2016
+% Last amended: 12/10/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
-%     All  arguments must be input
+%     First 3 arguments must be input
     if nargin < 3
-        error('all 3 arguments must be input')
+        error('the first 3 arguments must be input')
     end
 %     y must be a cell
     if ~iscell(y)
         error('y must be a cell')
     end
-%     y must be [n 1] for some n
+%     y must be [n 1] for some
     if ~iscolumn(y)
         error('y must be an n by 1 cell for some positive integer n')
     end
-%     All elements of y must be [n 2] numeric arrays for some n
+%     All elements of y must be [n 2] numeric arrays for some n > 1
     n_experiments = length(y);
     correct = arrayfun(@(exp_idx) isnumeric(y{exp_idx}) &&...
-        ismatrix(y{exp_idx}) && (size(y{exp_idx}, 2) == 2),...
-        1:n_experiments);
+        ismatrix(y{exp_idx}) && (size(y{exp_idx}, 2) == 2) &&...
+        (size(y{exp_idx}, 1) > 1), 1:n_experiments);
     if ~all(correct)
         err_msg = ['data for experiments ', num2str(find(~correct)),...
             ' are either not numeric, or not of size [n 2] for some',...
-            ' positive integer n'];
+            ' positive integer n > 1'];
         error(err_msg)
     end
 %     l_dirs must be a [2 n] numeric array for some n
@@ -94,6 +108,24 @@ function [y, zero_prob] = yTransformHMM(y, l_dirs, orth_l_dirs)
             ' corresponding column of l_dirs'];
         error(err_msg)
     end
+%     If input, diff_length must be a positive integer no greater than x-1,
+%     where x is the smallest n across experiments where
+%     size(y{exp_idx}) = [n 2]. If outside the acceptable range, it is
+%     placed inside at the nearest boundary. If not input, it is set to its
+%     default value of 1
+    if nargin == 3
+        diff_length = 1;
+    else
+        if ~(isnumeric(diff_length) && isreal(diff_length) &&...
+                isscalar(diff_length) &&...
+                (diff_length - round(diff_length) < num_tol))
+            error('diff_length must be a scalar integer')
+        end
+        smallest_n = min(arrayfun(@(exp_idx) size(y{exp_idx}, 1),...
+            1:n_experiments));
+        diff_length = max(1, diff_length);
+        diff_length = min((smallest_n-1), diff_length);
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -105,7 +137,9 @@ function [y, zero_prob] = yTransformHMM(y, l_dirs, orth_l_dirs)
 
     zero_prob = cell(size(y));
     for exp_idx = 1:n_experiments
-        y_diff = diff(y{exp_idx});
+        t = size(y{exp_idx}, 1);
+        y_diff = y{exp_idx}(1:diff_length:t, :);
+        y_diff = diff(y_diff);
         t = size(y_diff, 1);
         y_transformed = zeros(t, 2*n_l_dirs);
         x1 = y_diff * l_dirs;

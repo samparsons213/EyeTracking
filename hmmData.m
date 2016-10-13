@@ -1,5 +1,5 @@
 function [y, zero_prob, u] = hmmData(eye_tracking, target_placement,...
-    l_dirs, orth_l_dirs)
+    l_dirs, orth_l_dirs, diff_length)
 % Produces the transformations of the difference vectors of eye_tracking
 % data, and corresponding control sequence for each experiment on one
 % person's data
@@ -27,6 +27,13 @@ function [y, zero_prob, u] = hmmData(eye_tracking, target_placement,...
 %                   canonical latent directions, where each column is a
 %                   unit vector
 
+% diff_length:  positive integer giving the gaps between eye tracks for
+%               computing difference vectors, e.g. if diff_length = 3 and
+%               T = 7 for some element i of y, then the difference vectors
+%               (prior to any transformations) would be
+%               y{i}(4, :) - y{i}(1, :); y{i}(7, :)-y{i}(4, :). If not
+%               input then its default value is 1
+
 % Outputs:
 
 % y:                n_experiments by 1 cell, where each element is a
@@ -48,15 +55,15 @@ function [y, zero_prob, u] = hmmData(eye_tracking, target_placement,...
 
 % Author:       Sam Parsons
 % Date created: 27/09/2016
-% Last amended: 29/09/2016
+% Last amended: 12/10/2016
 
 %     *********************************************************************
 %     Check inputs
 %     *********************************************************************
 
-%     All arguments must be input
+%     The first 4 arguments must be input
     if nargin < 4
-        error('all 4 arguments must be input')
+        error('the first 4 arguments must be input')
     end
 %     Both eye_tracking and target_placement must be cells
     if ~(iscell(eye_tracking) && iscell(target_placement))
@@ -143,6 +150,24 @@ function [y, zero_prob, u] = hmmData(eye_tracking, target_placement,...
             ' corresponding column of l_dirs'];
         error(err_msg)
     end
+%     If input, diff_length must be a positive integer no greater than x-1,
+%     where x is the smallest n across experiments where
+%     size(y{exp_idx}) = [n 2]. If outside the acceptable range, it is
+%     placed inside at the nearest boundary. If not input, it is set to its
+%     default value of 1
+    if nargin == 3
+        diff_length = 1;
+    else
+        if ~(isnumeric(diff_length) && isreal(diff_length) &&...
+                isscalar(diff_length) &&...
+                (diff_length - round(diff_length) < num_tol))
+            error('diff_length must be a scalar integer')
+        end
+        smallest_n = min(arrayfun(@(exp_idx) size(eye_tracking{exp_idx, 1}, 1),...
+            1:n_experiments));
+        diff_length = max(1, diff_length);
+        diff_length = min((smallest_n-1), diff_length);
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -161,17 +186,20 @@ function [y, zero_prob, u] = hmmData(eye_tracking, target_placement,...
         1:size(target_placement, 1));
     eye_tracking = eye_tracking(any_targets, :);
     target_placement = target_placement(any_targets, :);
-    [y, zero_prob] = yTransformHMM(eye_tracking(:, 2), l_dirs, orth_l_dirs);
+    [y, zero_prob] = yTransformHMM(eye_tracking(:, 2), l_dirs, orth_l_dirs,...
+        diff_length);
     [control_seq, n_pre_target] = controlSequence(eye_tracking,...
         target_placement);
     n_experiments = length(control_seq);
-    u = arrayfun(@(exp_idx) control_seq{exp_idx}(2:end, :) -...
-        eye_tracking{exp_idx, 2}((n_pre_target(exp_idx)+1):(end-1), :),...
+    u = arrayfun(@(exp_idx) control_seq{exp_idx}((1+diff_length):diff_length:end, :) -...
+        eye_tracking{exp_idx, 2}((n_pre_target(exp_idx)+1):diff_length:(end-diff_length), :),...
         (1:n_experiments)', 'UniformOutput', false);
-    y = arrayfun(@(exp_idx) y{exp_idx}((n_pre_target(exp_idx)+1):end, :, :),...
+    y_start = arrayfun(@(exp_idx)...
+        1 + max(1, ceil(n_pre_target(exp_idx) / diff_length)), 1:n_experiments);
+    y = arrayfun(@(exp_idx) y{exp_idx}(y_start(exp_idx):end, :, :),...
         (1:n_experiments)', 'UniformOutput', false);
     zero_prob = arrayfun(@(exp_idx)...
-        zero_prob{exp_idx}((n_pre_target(exp_idx)+1):end, :),...
+        zero_prob{exp_idx}(y_start(exp_idx):end, :),...
         (1:n_experiments)', 'UniformOutput', false);
 
 end
