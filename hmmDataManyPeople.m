@@ -1,5 +1,5 @@
 function [y, zero_prob, u] = hmmDataManyPeople(eye_tracking,...
-    target_placement, l_dirs, orth_l_dirs)
+    target_placement, l_dirs, orth_l_dirs, diff_length)
 % Produces the transformations of the difference vectors of eye_tracking
 % data, and corresponding control sequence for each experiment on mutiple
 % people's data
@@ -30,6 +30,13 @@ function [y, zero_prob, u] = hmmDataManyPeople(eye_tracking,...
 % orth_l_dirs:      2 by m array of vectors orthogonal to each of the
 %                   canonical latent directions, where each column is a
 %                   unit vector
+
+% diff_length:  positive integer giving the gaps between eye tracks for
+%               computing difference vectors, e.g. if diff_length = 3 and
+%               T = 7 for some element i of y, then the difference vectors
+%               (prior to any transformations) would be
+%               y{i}(4, :) - y{i}(1, :); y{i}(7, :)-y{i}(4, :). If not
+%               input then its default value is 1
 
 % Outputs:
 
@@ -65,9 +72,9 @@ function [y, zero_prob, u] = hmmDataManyPeople(eye_tracking,...
 %     Check inputs
 %     *********************************************************************
 
-%     All arguments must be input
+%     The first 4 arguments must be input
     if nargin < 4
-        error('all 4 arguments must be input')
+        error('first 4 arguments must be input')
     end
 %     Both eye_tracking and target_placement must be cells
     if ~(iscell(eye_tracking) && iscell(target_placement))
@@ -122,6 +129,30 @@ function [y, zero_prob, u] = hmmDataManyPeople(eye_tracking,...
             ' corresponding column of l_dirs'];
         error(err_msg)
     end
+%     If input, diff_length must be a positive integer no greater than x-1,
+%     where x is the smallest n across experiments where
+%     size(y{exp_idx}) = [n 2]. If outside the acceptable range, it is
+%     placed inside at the nearest boundary. If not input, it is set to its
+%     default value of 1
+    if nargin == 3
+        diff_length = 1;
+    else
+        if ~(isnumeric(diff_length) && isreal(diff_length) &&...
+                isscalar(diff_length) &&...
+                (diff_length - round(diff_length) < num_tol))
+            error('diff_length must be a scalar integer')
+        end
+        n_people = length(eye_tracking);
+        smallest_n = zeros(n_people, 1);
+        for person_idx = 1:length(eye_tracking)
+            n_experiments = size(eye_tracking{person_idx}, 1);
+            smallest_n(person_idx) = min(arrayfun(@(exp_idx)...
+                size(eye_tracking{person_idx}{exp_idx, 1}, 1), 1:n_experiments));
+        end
+        smallest_n = min(smallest_n);
+        diff_length = max(1, diff_length);
+        diff_length = min((smallest_n-1), diff_length);
+    end
 %     *********************************************************************
 
 %     *********************************************************************
@@ -130,6 +161,7 @@ function [y, zero_prob, u] = hmmDataManyPeople(eye_tracking,...
 %     *********************************************************************
 
     [y, zero_prob, u] = cellfun(@(eye_track_person, target_placing_person)...
-        hmmData(eye_track_person, target_placing_person, l_dirs, orth_l_dirs),...
-        eye_tracking, target_placement, 'UniformOutput', false);
+        hmmData(eye_track_person, target_placing_person, l_dirs,...
+        orth_l_dirs, diff_length), eye_tracking, target_placement,...
+        'UniformOutput', false);
 end
