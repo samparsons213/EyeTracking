@@ -141,6 +141,6 @@ function l = logLikelihoodYU(y, p_ugx, pi_1, P, emission_means, emission_covs,..
         yu_conditional_likelihoods(t) = max(realmin, sum(alpha_t));
         filtered_x = alpha_t ./ yu_conditional_likelihoods(t);
     end
-    l = sum(yu_conditional_likelihoods);
+    l = sum(log(yu_conditional_likelihoods));
 
 end
