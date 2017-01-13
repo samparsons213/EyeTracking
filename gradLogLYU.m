@@ -1,8 +1,7 @@
-function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
-    emission_means, emission_covs, zero_probs)
-% Completes one full forward-backward pass for a given set of parameters,
-% returning the smoothed distributions p(x_t | y_1:T, u_1:T) and
-% p(x_t, x_t+1 | y_1:T, u_1:T), for one person in one experiment
+function [grad] = gradLogLYU(y, p_ugx, pi_1, P, emission_means,...
+    emission_covs, zero_prob, d_ec_inv_d_ec)
+% Computes the score vector for one person in on experiment evaluated at
+% the fitted parameters.
 
 % Inputs:
 
@@ -30,31 +29,30 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
 % emission_covs:    2 by 2 by (m+1) array of covariance matrices for
 %                   the Gaussian emission densities for each latent state
 
-% zero_probs:       n by m binary array, where zeros correspond to the
+% zero_prob:        n by m binary array, where zeros correspond to the
 %                   latent directions that have zero posterior probability,
 %                   and ones to all other latent directions
 
+% d_ec_inv_d_ec:    2 by 2 by 2 by 2 by (m+1) array of the derivatives of
+%                   emission_covs_inv(c, d, x) wrt emission_covs(a, b, x)
+
 % Outputs:
 
-% p_x:              n by (m+1) array of probability distributions (each row
-%                   sums to 1), giving smoothed distributions
-%                   p(x_t | y_1:T, u_1:T)
-
-% p_x_x_next:       (m+1) by (m+1) by (n-1) array of probability
-%                   distributions (each matrix sums to 1), giving smoothed
-%                   distributions p(x_t, x_t+1 | y_1:T, u_1:T)
+% grad:             n_parms by 1 approximate grad vector as described
+%                   above. Order of elements is pi_1(:), P(:),
+%                   emission_means(:), emission_covs(1,2,4)(:)
 
 % Author:           Sam Parsons
-% Date created:     22/09/2016
-% Last amended:     27/09/2016
+% Date created:     25/11/2016
+% Last amended:     25/11/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 7
-        error('all 7 arguments must be input')
+    if nargin < 8
+        error('all 8 arguments must be input')
     end
 %     y must be a [n 2 m+1] real array
     s_y = size(y);
@@ -99,50 +97,59 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
             ' array of real numbers'];
         error(err_msg)
     end
-% %     spd = arrayfun(@(ld_idx) issymmetric(emission_covs(:, :, ld_idx)) &&...
-% %         all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
-    spd = arrayfun(@(ld_idx) all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
-    if ~all(spd)
-        err_msg = ['all submatrices of emission covs must be symmetric',...
-            ' positive definite'];
-        error(err_msg)
+    pos_def = arrayfun(@(x_idx) all(eig(emission_covs(:, :, x_idx)) > 0),...
+        1:s_y(3));
+    if ~all(pos_def)
+        error('all submatrices of emission_covs must be positive definite')
     end
-%     zero_probs must be [n m+1] binary array
-    if ~(isnumeric(zero_probs) && isreal(zero_probs) && ismatrix(zero_probs) &&...
-            all(size(zero_probs) == [s_y(1), s_y(3) - 1]) &&...
-            all((zero_probs(:) == 0) | (zero_probs(:) == 1)))
+%     zero_prob must be [n m] binary array
+    if ~(isnumeric(zero_prob) && isreal(zero_prob) && ismatrix(zero_prob) &&...
+            all(size(zero_prob) == [s_y(1), s_y(3) - 1]) &&...
+            all((zero_prob(:) == 0) | (zero_prob(:) == 1)))
         error('zero_probs must be a [size(y, 1) size(y, 3)-1] binary array')
     end
 %     *********************************************************************
 
 %     *********************************************************************
-%     Main body of code. Computes the square roots of the determinants of
-%     the emission covariance matices, and then performs the forward pass
-%     to get filtered distributions, and then the backward pass to get
-%     smoothed distribution.
+%     Main body of code. Implements grad vector as derived by hand, as
+%     efficiently as possible. Derivation is based on derivations in JST's
+%     book. Posterior distribution of X|Y,U is first computed. Grad
+%     elements for pi_1 and P are trivial to compute once posterior is
+%     available. Elements for emission_means are relatively simple,
+%     emission_covs elements need to use chain rule over emission_covs_inv
+%     and sum out.
 %     *********************************************************************
 
-    p_x = zeros(s_y(1), s_y(3));
-    p_x_x_next = zeros(s_y(3), s_y(3), s_y(1)-1);
-    log_cov_dets = arrayfun(@(ld_idx) log(det(emission_covs(:, :, ld_idx))),...
-        1:s_y(3));
-%     fprintf('\tStarting forward pass...\n')
-    p_x(1, :) = filteredDistT1(y(1, :, :), pi_1, p_ugx(1, :),...
-        emission_means, emission_covs, log_cov_dets, zero_probs(1, :));
-    for t = 2:s_y(1)
-        p_x(t, :) = forwardOneStep(y(t, :, :), p_x(t-1, :), P, p_ugx(t, :),...
-            emission_means, emission_covs, log_cov_dets, zero_probs(t, :));
-        p_x(t, :) = p_x(t, :) + 1e-6;
-        p_x(t, :) = p_x(t, :) ./ sum(p_x(t, :));
-% %         if all(isnan(p_x(t, :)))
-% %             p_x(t, :) = ones(1, s_y(3)) ./ s_y(3);
-% %         end
-    end
-%     fprintf('\tForward pass completed. Starting backward pass...\n')
-    for t = (s_y(1)-1):-1:1
-        [p_x(t, :), p_x_x_next(:, :, t)] =...
-            backwardOneStep(p_x(t, :), p_x(t+1, :), P);
-    end
-%     fprintf('\tBackward pass completed.\n')
+    [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P, emission_means,...
+        emission_covs, zero_prob);
+%     grad_pi_1 and grad_P
+    pi_1(pi_1 < num_tol) = num_tol;
+    grad_pi_1 = (p_x(1, :) ./ pi_1) - 1;
+    s_p_x_x_next_3 = sum(p_x_x_next, 3);
+    P(P < num_tol) = num_tol;
+    grad_P = bsxfun(@minus, s_p_x_x_next_3 ./ P, sum(s_p_x_x_next_3, 2));
+%     grad_emission_means
+    y_centred = bsxfun(@minus, y, emission_means);
+    [T, m] = size(p_x);
+    grad_temp1 = sum(bsxfun(@times, y_centred, reshape(p_x, T, 1, m)), 1);
+    grad_em = -cell2mat(arrayfun(@(x_idx)...
+        grad_temp1(:, :, x_idx) / emission_covs(:, :, x_idx),...
+        1:m, 'UniformOutput', false)) ./ 2;
+%     grad_emission_covs
+    y_centred_sq = cell2mat(arrayfun(@(t) cell2mat(arrayfun(@(x_idx)...
+        y_centred(t, :, x_idx)' * y_centred(t, :, x_idx),...
+        reshape(1:m, 1, 1, m), 'UniformOutput', false)),...
+        reshape(1:T, 1, 1, 1, T), 'UniformOutput', false));
+    grad_temp2 = bsxfun(@minus,...
+        y_centred_sq, reshape(emission_covs, 2, 2, m, 1));
+    grad_temp3 = bsxfun(@times, reshape(grad_temp2, 2, 2, 1, 1, m, T),...
+        reshape(d_ec_inv_d_ec, 2, 2, 2, 2, m, 1));
+    grad_temp4 = squeeze(sum(sum(grad_temp3, 1), 2));
+    grad_ec =...
+        -sum(bsxfun(@times, grad_temp4, reshape(p_x', 1, 1, m, T)), 4) ./ 2;
+    n_ec = numel(emission_covs);
+    grad_ec_idx = sort([1:4:n_ec, 2:4:n_ec, 4:4:n_ec])';
+    
+    grad = [grad_pi_1(:); grad_P(:); grad_em(:); grad_ec(grad_ec_idx)];
 
 end

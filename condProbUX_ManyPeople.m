@@ -1,4 +1,5 @@
-function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
+function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs,...
+    median_norm_u, epsilon)
 % Returns the posterior densities of each element in the control sequence
 % given each canonical latent direction for each (differenced) time step in
 % each experiment for multiple people's data
@@ -13,6 +14,9 @@ function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
 
 % l_dirs:           2 by m array of canonical latent directions, where each
 %                   column is a unit vector
+
+% median_norm_u:    positive real number giving the median norm of the
+%                   control directions in the experiment
 
 % epsilon:          real number in (0, 0.5) giving the closest acceptable
 %                   norm-difference (see below) to 0 and 1
@@ -32,7 +36,7 @@ function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
 
 % Author:       Sam Parsons
 % Date created: 27/09/2016
-% Last amended: 27/09/2016
+% Last amended: 17/11/2016
 
 %     *********************************************************************
 %     Check input arguments
@@ -40,8 +44,8 @@ function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
 
 %     All  arguments must be input
 %     All  arguments must be input
-    if nargin < 3
-        error('all 3 arguments must be input')
+    if nargin < 4
+        error('all 4 arguments must be input')
     end
 %     control_seq_hmm must be an [n_people 1] cell array
     if ~(iscell(control_seq_hmm) && iscolumn(control_seq_hmm))
@@ -62,6 +66,11 @@ function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
     if ~all(correct)
         error('all columns in l_dirs must be unit vectors')
     end
+%     median_norm_u must be a positive real scalar
+    if ~(isscalar(median_norm_u) && isnumeric(median_norm_u) &&...
+            isreal(median_norm_u) && (median_norm_u > 0))
+        error('median_norm_u must be a positive real scalar')
+    end
 %     epsilon must be a real scalar in (0, 0.5)
     if ~(isscalar(epsilon) && isnumeric(epsilon) && isreal(epsilon) &&...
             (epsilon > 0) && (epsilon < 0.5))
@@ -75,7 +84,7 @@ function p_ugx = condProbUX_ManyPeople(control_seq_hmm, l_dirs, epsilon)
 %     *********************************************************************
 
     p_ugx = cellfun(@(control_seq_hmm_person)...
-        condProbUXAll(control_seq_hmm_person, l_dirs, epsilon),...
-        control_seq_hmm, 'UniformOutput', false);
+        condProbUXAll(control_seq_hmm_person, l_dirs, median_norm_u,...
+        epsilon), control_seq_hmm, 'UniformOutput', false);
 
 end

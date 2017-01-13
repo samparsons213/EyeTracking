@@ -1,4 +1,4 @@
-function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
+function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, median_norm_u, epsilon)
 % Returns the posterior densities of each element in the control sequence
 % given each canonical latent direction for each (differenced) time step in
 % each experiment for one person's data
@@ -12,6 +12,9 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 
 % l_dirs:           2 by m array of canonical latent directions, where each
 %                   column is a unit vector
+
+% median_norm_u:    positive real number giving the median norm of the
+%                   control directions in the experiment
 
 % epsilon:          real number in (0, 0.5) giving the closest acceptable
 %                   norm-difference (see below) to 0 and 1
@@ -30,15 +33,15 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 
 % Author:       Sam Parsons
 % Date created: 21/09/2016
-% Last amended: 05/10/2016
+% Last amended: 17/11/2016
 
 %     *********************************************************************
 %     Check input arguments
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 3
-        error('all 3 arguments must be input')
+    if nargin < 4
+        error('all 4 arguments must be input')
     end
 %     control_seq_hmm must conform to the output of controlSequenceHMM.m
     if ~(iscell(control_seq_hmm) && iscolumn(control_seq_hmm))
@@ -70,6 +73,11 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
     if ~all(correct)
         error('all columns in l_dirs must be unit vectors')
     end
+%     median_norm_u must be a positive real scalar
+    if ~(isscalar(median_norm_u) && isnumeric(median_norm_u) &&...
+            isreal(median_norm_u) && (median_norm_u > 0))
+        error('median_norm_u must be a positive real scalar')
+    end
 %     epsilon must be a real scalar in (0, 0.5)
     if ~(isscalar(epsilon) && isnumeric(epsilon) && isreal(epsilon) &&...
             (epsilon > 0) && (epsilon < 0.5))
@@ -84,7 +92,7 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
 %     constant inside each experiment. The normaliser of the conditional
 %     densities p(u | x) for x = 2,...,(dim_x+1) (i.e. movement states) is
 %     calculated here as 
-%     integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, 2*pi) = 6.5328
+%     integral(@(theta) 2\log(2) - log(1-cos(theta)), 0, pi) = 3.2664
 %     (4 d.p.)
 %     *********************************************************************
 
@@ -92,8 +100,8 @@ function p_ugx = condProbUXAll(control_seq_hmm, l_dirs, epsilon)
     p_ugx = cell(n_experiments, 1);
     for exp_idx = 1:n_experiments
         n = size(control_seq_hmm{exp_idx}, 1);
-        median_norm_u = median(arrayfun(@(row_idx)...
-            norm(control_seq_hmm{exp_idx}(row_idx, :)), 1:n));
+% %         median_norm_u = median(arrayfun(@(row_idx)...
+% %             norm(control_seq_hmm{exp_idx}(row_idx, :)), 1:n));
         p_ugx{exp_idx} = cell2mat(arrayfun(@(row_idx)...
             condProbUX(control_seq_hmm{exp_idx}(row_idx, :)', l_dirs,...
             median_norm_u, movement_z, epsilon), (1:n)', 'UniformOutput',...

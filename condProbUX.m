@@ -42,8 +42,8 @@ function p_ugx = condProbUX(u, l_dirs, median_norm_u, movement_z,...
 %     *********************************************************************
 
 %     All  arguments must be input
-    if nargin < 3
-        error('all 3 arguments must be input')
+    if nargin < 5
+        error('all 5 arguments must be input')
     end
 %     u must be a numeric vector of size [2 1]
     if ~isnumeric(u)
@@ -68,7 +68,6 @@ function p_ugx = condProbUX(u, l_dirs, median_norm_u, movement_z,...
         error('all columns in l_dirs must be unit vectors')
     end
 %     median_norm_u must be a positive real scalar
-    norm_u = norm(u);
     if ~(isscalar(median_norm_u) && isnumeric(median_norm_u) &&...
             isreal(median_norm_u) && (median_norm_u > 0))
         error('median_norm_u must be a positive real scalar')
@@ -101,7 +100,7 @@ function p_ugx = condProbUX(u, l_dirs, median_norm_u, movement_z,...
 %     dividing by median_norm_u
 %     *********************************************************************
 
-    norm_u_ratio = norm_u / median_norm_u;
+    norm_u_ratio = norm(u) / median_norm_u;
     u = u ./ norm(u);
     diffs = 0.5 .* arrayfun(@(dir_idx) norm(u - l_dirs(:, dir_idx)),...
         1:size(l_dirs, 2));

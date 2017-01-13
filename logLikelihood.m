@@ -121,6 +121,6 @@ function l = logLikelihood(y, pi_1, P, emission_means, emission_covs,...
         y_conditional_likelihoods(t) = sum(alpha_t);
         filtered_x = alpha_t ./ y_conditional_likelihoods(t);
     end
-    l = sum(y_conditional_likelihoods);
+    l = sum(log(y_conditional_likelihoods));
 
 end

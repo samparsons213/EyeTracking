@@ -111,7 +111,8 @@ function l = logLikelihoodYU(y, p_ugx, pi_1, P, emission_means, emission_covs,..
 %     p(x_t) for each time t. Then calculate the conditional likelihoods
 %     p(y_t | x_t) for each time t and state x_t. Then take the average
 %     over x_t: p(y_t) = sum_x_t p(x_t)*p(y_t | x_t) for each t. Then take
-%     logs and sum over time to get the data log likelihood
+%     logs and sum over time to get the data log likelihood (now taking
+%     mean over time to normalise for length of data)
 %     *********************************************************************
 
 % %     p_x = priorMarginals(pi_1, P, s_y(1));
@@ -141,6 +142,6 @@ function l = logLikelihoodYU(y, p_ugx, pi_1, P, emission_means, emission_covs,..
         yu_conditional_likelihoods(t) = max(realmin, sum(alpha_t));
         filtered_x = alpha_t ./ yu_conditional_likelihoods(t);
     end
-    l = sum(log(yu_conditional_likelihoods));
+    l = mean(log(yu_conditional_likelihoods));
 
 end
