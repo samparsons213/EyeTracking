@@ -96,7 +96,7 @@ function [projectedMovements, zero_prob] = axisProjection(gazePos, axis_dir, axi
         diff_length = min(max(1, diff_length), smallest_trial-1);
     end
     
-    %     *********************************************************************
+    % *********************************************************************
 
     % *********************************************************************
     % Main body of code. Perform differentiation on gazePos, then the transforming

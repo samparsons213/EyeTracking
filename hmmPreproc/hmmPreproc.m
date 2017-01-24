@@ -101,7 +101,7 @@ function [y, zero_prob, u] = hmmPreproc(ts, eye_tracking, tst, target_placement,
     
     % Calculat the difference between the target and the previous gaze
     % position
-    u = control_seq(diff_length:diff_length:end, :) -...
+    u = control_seq((diff_length+1):diff_length:end, :) -...
         eye_tracking((n_pre_target+1):diff_length:(end-diff_length), :);
     
     u_length = size(u, 1);
