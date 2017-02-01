@@ -30,28 +30,29 @@ function [p_x, p_x_x_next] = backwardOneStep(p_x, p_x_next, P)
 %     Check input arguments
 %     *********************************************************************
 
-%     All  arguments must be input
+    isMatrix = @(x) isnumeric(x) && isreal(x) && ismatrix(x);
+    isPositiveMatrix = @(x) isMatrix(x) && all(x(:) >= 0);
+    
     if nargin < 3
         error('all 3 arguments must be input')
     end
-%     p_x must be [1 n+1] probability distribution
+
     num_tol = 1e-8;
-    if ~(isnumeric(p_x) && isreal(p_x) && isrow(p_x) && all(p_x >= 0) &&...
-            (abs(1 - sum(p_x)) < num_tol))
+    if ~(isPositiveMatrix(p_x) && (abs(1 - sum(p_x)) < num_tol))
         error('p_x must be a [1 n+1] probability matrix')
     end
-%     p_x_next must be a [1 n+1] probability distribution
+    
+
     dim_x = length(p_x);
-    if ~(isnumeric(p_x_next) && isreal(p_x_next) && isrow(p_x_next) &&...
-            (length(p_x_next) == dim_x) && all(p_x_next >= 0) &&...
+    if ~(isPositiveMatrix(p_x_next) && (length(p_x_next) == dim_x) && ...
             (abs(1 - sum(p_x_next)) < num_tol))
         error('p_x_next must be a [1 n+1] probability matrix')
     end
-%     P must be a [n+1 n+1] probability distribution (all rows sum to 1).
-%     Probability condition checked in forwardBackward.m
-    if ~(isnumeric(P) && isreal(P) && ismatrix(P) && all(size(P) == dim_x))
+
+    if ~(isMatrix(P) && all(size(P) == dim_x))
         error('P must be a real square matrix of size length(p_x)')
     end
+    
 %     *********************************************************************
 
 %     *********************************************************************

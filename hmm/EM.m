@@ -1,5 +1,6 @@
-function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
-    emission_means, emission_covs, zero_probs, n_iters, epsilon, min_eig)
+function [best_pi_1, best_P, best_emission_means, best_emission_covs, best_log_likelihood] = ...
+    EM(y, p_ugx, zero_probs, n_iters, epsilon, min_eig, n_restarts)
+
 % Performs n_iters iterations of EM on one person's data for one experiment
 
 % Inputs:
@@ -16,18 +17,6 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 %                   latent state, last n elements correspond to each
 %                   direction in l_dirs
 
-% pi_1:             1 by (m+1) probability distribution (sums to 1) giving
-%                   the prior distribution of x_1
-
-% P:                (n+1) by (n+1) matrix of transition probabilties, with
-%                   each row summing to 1
-
-% emission_means:   1 by 2 by (m+1) array of mean vectors for the Gaussian 
-%                   emission densities for each latent state
-
-% emission_covs:    2 by 2 by (m+1) array of covariance matrices for
-%                   the Gaussian emission densities for each latent state
-
 % zero_probs:       n by m binary array, where zeros correspond to the
 %                   latent directions that have zero posterior probability,
 %                   and ones to all other latent directions
@@ -40,6 +29,9 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 
 % min_eig:          positive real number giving the minimum acceptable
 %                   eigenvalue  of estimated covariance matrices
+
+% n_restarts:       number of restarts to do in order to find the optimal
+%                   parameters
 
 % Outputs:
 
@@ -59,117 +51,104 @@ function [pi_1, P, emission_means, emission_covs] = EM(y, p_ugx, pi_1, P,...
 % Date created:     22/09/2016
 % Last amended:     27/09/2016
 
-%     *********************************************************************
-%     Check input arguments
-%     *********************************************************************
+% *********************************************************************
+%  Check input arguments
+% *********************************************************************
 
-%     All  arguments must be input
-    if nargin < 10
-        error('all 10 arguments must be input')
+    isScalar = @(x) isnumeric(x) && isreal(x) && isscalar(x);
+    isPositiveScalar = @(x) isScalar(x) && (x > 0);
+    isMatrix = @(x) isnumeric(x) && isreal(x) && ismatrix(x);
+    is3DMatrix = @(x) isnumeric(x) && isreal(x) && (ndims(x) == 3);
+    isPositiveMatrix = @(x) isnumeric(x) && isreal(x) && ismatrix(x) && all(x(:) > 0);
+    
+    if nargin < 7
+        error('all 7 arguments must be input')
     end
-%     y must be a [n 2 m+1] real array
+
     s_y = size(y);
-    if ~(isnumeric(y) && isreal(y) && (ndims(y) == 3) && (s_y(2) == 2))
-        error('y must be a [n 2 m+1] real array')
+    
+    if ~(isPositiveMatrix(p_ugx) && all(size(p_ugx) == [s_y(1), s_y(3)]))
+        error('p_ugx must be a [size(y, 1) size(y, 3)] array of positive reals')
     end
-%     p_ugx must be a [n m+1] array of positive reals
-    if ~(isnumeric(p_ugx) && isreal(p_ugx) && ismatrix(p_ugx) &&...
-            all(size(p_ugx) == [s_y(1), s_y(3)]) && all(p_ugx(:) > 0))
-        err_msg = ['p_ugx must be a [size(y, 1) size(y, 3)] array of',...
-            ' positive reals'];
-        error(err_msg)
-    end
-%     pi_1 must be [1 m+1] array of non-negative reals that sum to 1
-    num_tol = 1e-8;
-    if ~(isnumeric(pi_1) && isreal(pi_1) && isrow(pi_1) &&...
-            (length(pi_1) == s_y(3)) && all(pi_1 >= 0) &&...
-            (abs(1 - sum(pi_1)) < num_tol))
-        error('pi_1 must be [1 size(y, 3)] probability distribution')
-    end
-%     P must be [m+1 m+1] and each row must be a probability distribution
-%     (sums to 1)
-    if ~(isnumeric(P) && isreal(P) && ismatrix(P) && all(size(P) == s_y(3)))
-        error('P must be a real square matrix of size size(y, 3)')
-    end
-    is_prob_dist = arrayfun(@(ld_idx) all(P(ld_idx, :) >= 0) &&...
-        (abs(1 - sum(P(ld_idx, :))) < num_tol), 1:s_y(3));
-    if ~all(is_prob_dist)
-        error('all rows of P must be probability distributions')
-    end
-%     emission_means must be [1 2 m+1] array of real numbers
-    if ~(isnumeric(emission_means) && isreal(emission_means) &&...
-            (ndims(emission_means) == 3) &&...
-            all(size(emission_means) == [1, s_y(2), s_y(3)]))
-        error('emission_means must be a real array of equal size to y')
-    end
-%     emission_covs must be [2 2 m+1] array of real covariance matrices.
-%     Symmetric positive definiteness is tested in forwardBackward.m
-    if ~(isnumeric(emission_covs) && isreal(emission_covs) &&...
-            (ndims(emission_covs) == 3) &&...
-            all(size(emission_covs) == [2 2 s_y(3)]))
-        err_msg = ['emission_covs must be [2 2 size(y, 3)]',...
-            ' array of real numbers'];
-        error(err_msg)
-    end
-%     zero_probs must be [n m+1] binary array
-    if ~(isnumeric(zero_probs) && isreal(zero_probs) && ismatrix(zero_probs) &&...
-            all(size(zero_probs) == [s_y(1), s_y(3) - 1]) &&...
-            all((zero_probs(:) == 0) | (zero_probs(:) == 1)))
-        error('zero_probs must be a [size(y, 1) size(y, 3)-1] binary array')
-    end
-%     n_iters must be a positive integer
-    if ~(isnumeric(n_iters) && isreal(n_iters) && isscalar(n_iters) &&...
-            (n_iters == round(n_iters)) && (n_iters > 0))
+
+    if ~(isPositiveScalar(n_iters) && (n_iters == round(n_iters)))
         error('n_iters must be a positive integer')
     end
-%     epsilon must be a positive real number
-    if ~(isnumeric(epsilon) && isreal(epsilon) && isscalar(epsilon) &&...
-            (epsilon > 0))
+    
+    if ~(isPositiveScalar(n_restarts) && (n_restarts == round(n_restarts)))
+        error('n_restarts must be a positive integer')
+    end
+    
+    if ~isPositiveScalar(epsilon)
         error('epsilon must be a positive real number')
     end
-%     min_eig must be a positive real number
-    if ~(isnumeric(min_eig) && isreal(min_eig) && isscalar(min_eig) &&...
-            (min_eig > 0))
+
+    if ~isPositiveScalar(min_eig)
         error('min_eig must be a positive real number')
     end
-%     *********************************************************************
+    
+% *********************************************************************
 
-%     *********************************************************************
+% *********************************************************************
 %     Main body of function. Within each EM iteration, a forward-backward
 %     pass is completed, giving the posterior distribution of the latent
 %     variables given the observed data and the control sequence. Then, the
 %     posterior is used to optimise the parameters relative to their
 %     previous setting. This two-stage procedure is iterated n_iters times
-%     to produce final estimate of parameters.
-%     *********************************************************************
+%     to produce final estimate of parameters. The process can be repeated
+%     n_restarts to try to find the best random initialisation
+% *********************************************************************
+    
+    zero_probs = double(zero_probs);
+    best_log_likelihood = -realmax;
+    
+    for restart_idx = 1:n_restarts
+        fprintf('\n\nStarting parameter estimation step %d...\n\n', restart_idx)
+        [pi_1, P, emission_means, emission_covs] = generateRandomParameters(y, zero_probs);
+        [pi_1, P, emission_means, emission_covs] = EMoptimiseParameters(y, p_ugx, zero_probs, pi_1, P, ...
+            emission_means, emission_covs, n_iters, epsilon, min_eig);
+        
+        % Keep the best restart
+         log_likelihood = dataLogLikelihood(y, p_ugx, zero_probs, pi_1, P, emission_means, emission_covs);
+         
+         if (log_likelihood > best_log_likelihood),
+              [best_pi_1, best_P, best_emission_means, best_emission_covs, best_log_likelihood] = ...
+                        deal(pi_1, P, emission_means, emission_covs, log_likelihood);
+         end
+    end
+end
 
+function [pi_1, P, emission_means, emission_covs] = EMoptimiseParameters(y, p_ugx, zero_probs, pi_1, P, ...
+            emission_means, emission_covs, n_iters, epsilon, min_eig)
+    
     for iter = 1:n_iters
         fprintf('EM iteration %d\n', iter)
         old_parms = [pi_1(:); P(:); emission_means(:); emission_covs(:)];
+
+        % Expectation step
         fb_completed = false;
         while ~fb_completed
-            fb_completed = true;
             try
-                [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
-                    emission_means, emission_covs, zero_probs);
+                [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P, emission_means, emission_covs, zero_probs);
+                fb_completed = true;
             catch ME
-                fprintf('\tforwardBackward.m failed. Re-initialising emission_covs and trying again\n')
-                fb_completed = false;
-                [pi_1, P, emission_means, emission_covs] =...
-                    generateRandomParameters(y, zero_probs);
+                warning(getReport(ME))
+                warning('\t forwardBackward.m failed. Re-initialising emission_covs and trying again\n')
+                [pi_1, P, emission_means, emission_covs] = generateRandomParameters(y, zero_probs);
             end
         end
-        [pi_1, P, emission_means, emission_covs] =...
-            optimiseParameters(y, p_x, p_x_x_next, min_eig);
-        mean_delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
-            emission_covs(:)]));
-        max_delta = max(abs(old_parms - [pi_1(:); P(:); emission_means(:);...
-            emission_covs(:)]));
-        fprintf('\tmean |delta| = %f\tmax |delta| = %f\n', mean_delta,...
-            max_delta)
+
+        % Maximization step
+        [pi_1, P, emission_means, emission_covs] = maximizeHMM(y, p_x, p_x_x_next, min_eig);
+
+        % Advance checking
+        mean_delta = mean(abs(old_parms - [pi_1(:); P(:); emission_means(:); emission_covs(:)]));
+        max_delta = max(abs(old_parms - [pi_1(:); P(:); emission_means(:); emission_covs(:)]));
+        fprintf('\tmean |delta| = %f\tmax |delta| = %f\n', mean_delta, max_delta)
+
+        % Note: it is common practice to give n steps of graze
         if max_delta < epsilon
             break
         end
     end
-
 end

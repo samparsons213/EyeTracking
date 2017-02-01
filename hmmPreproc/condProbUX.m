@@ -105,7 +105,7 @@ function p_ugx = condProbUX(u, axis_dir, median_norm_u, movement_z, epsilon)
     exp_scores = zeros(N, 1+n_l_dir);
     
     % Calculate the score for 'no movement'
-    exp_scores(:, 1) = normU' / median_norm_u;
+    exp_scores(:, 1) = min(1, normU' / median_norm_u);
     
     % Do the difference on each axis (remember that first is reserved for
     % 'no movement' state) and calculate the score
@@ -113,6 +113,7 @@ function p_ugx = condProbUX(u, axis_dir, median_norm_u, movement_z, epsilon)
         exp_scores(:, 1+k) = 0.5*sqrt(sum(bsxfun(@minus, u, axis_dir(:, k)).^2))';
     end
     
+    % We need this to have it in the open interval (0, 1)
     exp_scores = min(max(epsilon, exp_scores), 1-epsilon);
     
     Z = [median_norm_u, repmat(movement_z, 1, n_l_dir)];

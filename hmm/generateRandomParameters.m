@@ -1,5 +1,4 @@
-function [pi_1, P, emission_means, emission_covs] =...
-    generateRandomParameters(y, zero_probs, alpha)
+function [pi_1, P, emission_means, emission_covs] = generateRandomParameters(y, zero_probs, alpha)
 % Returns randomly initialised parameters for the proposed HMM, taking one
 % hyperparameter as input for producing random probability distributions.
 % emission_means and emission_covs are drawn from distributions depending
@@ -8,15 +7,15 @@ function [pi_1, P, emission_means, emission_covs] =...
 % Inputs:
 
 % y:                either a [n 2 m+1] array of transformed difference data
-%                   for one person and one experiment, or an [n_people 1]
+%                   for one person and one experiment, or an [n_trial 1]
 %                   cell array, each element of which is a [n 2 m+1] array
 %                   of transformed difference data, for different n but
 %                   constant m
 
-% zero_probs:       either a [n 2 m] binary array where zeros indicate zero
+% zero_probs:       either a [n m] binary array where zeros indicate zero
 %                   posterior probability for that latent state at that
 %                   time, and ones indicate positive posterior probability,
-%                   or a [n_people 1] cell array, each element of which is
+%                   or a [n_trial 1] cell array, each element of which is
 %                   such a binary array with n equal to the corresponding
 %                   n in y and constant m, or a logical array of that size
 %                   with false <=> 0 and true <=> 1
@@ -46,75 +45,72 @@ function [pi_1, P, emission_means, emission_covs] =...
 %     Check inputs
 %     *********************************************************************
 
-%     y and zero_probs must be input
+    is3DTensor = @(x) isnumeric(x) && isreal(x) && (ndims(x) == 3);
+    isBinaryMatrix = @(x) isnumeric(x) && all((x(:) == 0) | x(:) == 1);
+    isPositiveReal = @(x) isnumeric(x) && isreal(x) && isscalar(x) && (x > 0);
+    
     if nargin < 2
         error('y and zero_probs must be input')
     end
-%     y must be either a [n 2 m+1] real array, or a [n_people 1] cell
-%     array, each element of which is [n 2 m+1] for some m and constant m
+    
     if ~( (iscell(y) && iscolumn(y)) ||...
             (isnumeric(y) && isreal(y) && (ndims(y) == 3) && (size(y, 2) == 2)) )
-        err_msg = ['y must either be a [n 2 m+1] reall array, or a',...
-            ' [n_people 1] cell array'];
-        error(err_msg)
+        error('y must either be a [n 2 m+1] reall array, or a [n_people 1] cell array')
     end
+    
     if iscell(y)
+        % Check y
         n_people = length(y);
-        dim_x = size(y{1}, 3);
-        correct = arrayfun(@(person_idx) isnumeric(y{person_idx}) &&...
-            isreal(y{person_idx}) && (ndims(y{person_idx}) == 3) &&...
-            all([size(y{person_idx}, 2), size(y{person_idx}, 3)] == [2, dim_x]),...
-            1:n_people);
+        correct = arrayfun(@(person_idx) is3DTensor(y{person_idx}));
         if ~all(correct)
-            err_msg = ['each element in y must be a [n 2 m+1] for some n',...
-                ' and constant m'];
-            error(err_msg)
+            error('each element in y must be a3D tensor')
         end
-    else
-        dim_x = size(y, 3);
-    end
-%     zero_probs must have same form as y; if y is real [n 2 m+1] then
-%     zero_probs must be [n m], if y is [n_people 1] cell then zero_probs
-%     must be [n_people 1] cell with each element [n m] for same n as
-%     corresponding element of y, and either be binary or logical
-    if iscell(y)
+        
+        [~, dim_x, dim_m] = size(y{1});
+        sameSize = @(x) all([size(x, 2), size(x, 3)] == [dim_x, dim_m]);
+        correct = arrayfun(@(person_idx) sameSize(y{person_idx}),  1:n_people);
+        
+        if ~all(correct)
+            error('all elements in y must share the same dimensions')
+        end
+        
+        % Check zero_prob
         if ~(iscell(zero_probs) && iscolumn(zero_probs))
             error('zero_probs must be a [n_people 1] cell array')
         end
+        
         correct_size = arrayfun(@(person_idx) ismatrix(zero_probs{person_idx}) &&...
-            all([size(zero_probs{person_idx}, 1), size(zero_probs{person_idx}, 2)] ==...
-            [size(y{person_idx}, 1), size(y{person_idx}, 3) - 1]), 1:n_people);
-        correct_type = arrayfun(@(person_idx) islogical(zero_probs{person_idx}) ||...
-            (isnumeric(zero_probs{person_idx}) &&...
-            all((zero_probs{person_idx}(:) == 0) | (zero_probs{person_idx}(:) == 1))),...
-            1:n_people);
+            all(size(zero_probs{person_idx}) == [size(y{person_idx}, 1), dim_m-1]), 1:n_people);
+        
+        correct_type = arrayfun(@(person_idx) islogical(zero_probs{person_idx})...
+                        || isBinaryMatrix(zero_probs{person_idx}), 1:n_people);
+        
         if ~all(correct_size & correct_type)
-            err_msg = ['zero_probs must be a [n_people 1] cell array, ',...
+            error(['zero_probs must be a [n_people 1] cell array, ',...
                 'each element of which must be [n m] with n same as',...
                 ' corresponding element of y and m constant, and must',...
-                ' either be logical or binary'];
-            error(err_msg)
+                ' either be logical or binary']);
         end
     else
-        if ~(ismatrix(zero_probs) && (islogical(zero_probs) ||...
-                (isnumeric(zero_probs) &&...
-                all((zero_probs(:) == 0) | (zero_probs(:) == 1)))))
+        if ~(isBinaryMatrix(zero_probs) || islogical(zero_probs))
             error('zero_probs must be [n m] and either be logical or binary')
         end
+        
+        dim_m = size(y, 3);
     end
-%     if input, alpha must be a positive real, if not input it is set to 1
+    
     if nargin == 3
-        if ~(isnumeric(alpha) && isreal(alpha) && isscalar(alpha) &&...
-                (alpha > 0))
+        if ~isPositiveReal(alpha)
             error('alpha must be a positive real number')
         end
     else
         alpha = 1;
     end
+    
 %     *********************************************************************
 
 %     *********************************************************************
-%     Main body of code. pi_1 is drawn from D(alpha.*ones(1, dim_x)), as is
+%     Main body of code. pi_1 is drawn from D(alpha.*ones(1, dim_m)), as is
 %     each row of P. emission_means has all elements drawn from N(0, 1).
 %     emission_means and emission_covs are first initialised using either
 %     initialEmissionParameters.m or initialEmissionParametersManyPeople.m.
@@ -126,20 +122,25 @@ function [pi_1, P, emission_means, emission_covs] =...
 %     (currently set to 1e-6), another random matrix is drawn
 %     *********************************************************************
 
-    n = 4;
-    random_gammas = gamrnd(alpha, 1, (dim_x+1), dim_x);
-    pi_1 = random_gammas(1, :) ./ sum(random_gammas(1, :));
-    P = bsxfun(@rdivide, random_gammas(2:end, :),...
-        sum(random_gammas(2:end, :), 2));
+    % HMM parameters
+    pi_1 = gamrnd(alpha, 1, 1, dim_m);
+    pi_1 = pi_1 ./ sum(pi_1);
+    
+    P = gamrnd(alpha, 1, dim_m, dim_m);
+    P = bsxfun(@rdivide, P, sum(P, 2));
+    
+    % Emission probability parameters
     if iscell(y)
-        [emission_means, emission_covs] =...
-            initialEmissionParametersManyPeople(y, zero_probs);
+        [emission_means, emission_covs] = initialEmissionParameters(y, zero_probs);
     else
-        [emission_means, emission_covs] =...
-            initialEmissionParameters(y, zero_probs);
+        [yy{1}, zz{1}] = deal(y, zero_probs);
+        [emission_means, emission_covs] = initialEmissionParameters(yy, zz);
     end
+    
+    % Correction of the covariance matrices in case they are not invertible
+    n = 4;
     rcond_tol = 1e-6;
-    for x_idx = 1:dim_x
+    for x_idx = 1:dim_m
         emission_chol_cov = chol(emission_covs(:, :, x_idx));
         emission_means(:, :, x_idx) = emission_means(:, :, x_idx) +...
             randn(1, 2) * emission_chol_cov;
@@ -147,7 +148,7 @@ function [pi_1, P, emission_means, emission_covs] =...
         while ~invertible
             emission_cov_temp = randn(n, 2) * (emission_chol_cov ./ sqrt(n));
             emission_cov_temp = emission_cov_temp' * emission_cov_temp;
-            if rcond(emission_cov_temp) > rcond_tol
+            if rcond(emission_cov_temp) > rcond_tol,
                 invertible = true;
                 emission_covs(:, :, x_idx) = emission_cov_temp;
             end

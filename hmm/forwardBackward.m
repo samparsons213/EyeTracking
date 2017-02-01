@@ -55,64 +55,53 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
 %     Check input arguments
 %  *********************************************************************
 
-%     All  arguments must be input
+    isMatrix = @(x) isnumeric(x) && isreal(x) && ismatrix(x);
+    is3DMatrix = @(x) isnumeric(x) && isreal(x) && (ndims(x) == 3);
+
     if nargin < 7
         error('all 7 arguments must be input')
     end
-%     y must be a [n 2 m+1] real array
+    
     s_y = size(y);
-    if ~(isnumeric(y) && isreal(y) && (ndims(y) == 3) && (s_y(2) == 2))
+    if ~(is3DMatrix(y) && (s_y(2) == 2))
         error('y must be a [n 2 m+1] real array')
     end
-%     p_ugx must be a [n m+1] array of positive reals
-    if ~(isnumeric(p_ugx) && isreal(p_ugx) && ismatrix(p_ugx) &&...
-            all(size(p_ugx) == [s_y(1), s_y(3)]) && all(p_ugx(:) > 0))
-        err_msg = ['p_ugx must be a [size(y, 1) size(y, 3)] array of',...
-            ' positive reals'];
-        error(err_msg)
+    
+    if ~(isMatrix(p_ugx) && all(size(p_ugx) == [s_y(1), s_y(3)]) && all(p_ugx(:) > 0))
+        error('p_ugx must be a [size(y, 1) size(y, 3)] array of positive reals')
     end
-%     pi_1 must be [1 m+1] array of non-negative reals that sum to 1
+    
     num_tol = 1e-8;
-    if ~(isnumeric(pi_1) && isreal(pi_1) && isrow(pi_1) &&...
-            (length(pi_1) == s_y(3)) && all(pi_1 >= 0) &&...
+    if ~(isMatrix(pi_1) && (length(pi_1) == s_y(3)) && all(pi_1 >= 0) &&...
             (abs(1 - sum(pi_1)) < num_tol))
         error('pi_1 must be [1 size(y, 3)] probability distribution')
     end
-%     P must be [m+1 m+1] and each row must be a probability distribution
-%     (sums to 1)
-    if ~(isnumeric(P) && isreal(P) && ismatrix(P) && all(size(P) == s_y(3)))
+    
+    if ~(isMatrix(P) && all(size(P) == s_y(3)))
         error('P must be a real square matrix of size size(y, 3)')
     end
+    
     is_prob_dist = arrayfun(@(ld_idx) all(P(ld_idx, :) >= 0) &&...
         (abs(1 - sum(P(ld_idx, :))) < num_tol), 1:s_y(3));
     if ~all(is_prob_dist)
         error('all rows of P must be probability distributions')
     end
-%     emission_means must be [1 2 m+1] array of real numbers
-    if ~(isnumeric(emission_means) && isreal(emission_means) &&...
-            (ndims(emission_means) == 3) &&...
-            all(size(emission_means) == [1, s_y(2), s_y(3)]))
+    
+    if ~(is3DMatrix(emission_means) && all(size(emission_means) == [1, s_y(2), s_y(3)]))
         error('emission_means must be a real array of equal size to y')
     end
-%     emission_covs must be [2 2 m+1] array of real covariance matrices.
-    if ~(isnumeric(emission_covs) && isreal(emission_covs) &&...
-            (ndims(emission_covs) == 3) &&...
-            all(size(emission_covs) == [2 2 s_y(3)]))
-        err_msg = ['emission_covs must be [2 2 size(y, 3)]',...
-            ' array of real numbers'];
-        error(err_msg)
+    
+    if ~(is3DMatrix(emission_covs) && all(size(emission_covs) == [2 2 s_y(3)]))
+        error('emission_covs must be [2 2 size(y, 3)] array of real numbers')
     end
-% %     spd = arrayfun(@(ld_idx) issymmetric(emission_covs(:, :, ld_idx)) &&...
-% %         all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
+    
+    
     spd = arrayfun(@(ld_idx) all(eig(emission_covs(:, :, ld_idx)) > 0), 1:s_y(3));
     if ~all(spd)
-        err_msg = ['all submatrices of emission covs must be symmetric',...
-            ' positive definite'];
-        error(err_msg)
+        error('all submatrices of emission covs must be symmetric positive definite')
     end
-%     zero_probs must be [n m+1] binary array
-    if ~(isnumeric(zero_probs) && isreal(zero_probs) && ismatrix(zero_probs) &&...
-            all(size(zero_probs) == [s_y(1), s_y(3) - 1]) &&...
+    
+    if ~(isMatrix(zero_probs) && all(size(zero_probs) == [s_y(1), s_y(3)-1]) &&...
             all((zero_probs(:) == 0) | (zero_probs(:) == 1)))
         error('zero_probs must be a [size(y, 1) size(y, 3)-1] binary array')
     end
@@ -123,29 +112,23 @@ function [p_x, p_x_x_next] = forwardBackward(y, p_ugx, pi_1, P,...
 %     the emission covariance matices, and then performs the forward pass
 %     to get filtered distributions, and then the backward pass to get
 %     smoothed distribution.
-%  *********************************************************************
+%% *********************************************************************
 
     p_x = zeros(s_y(1), s_y(3));
     p_x_x_next = zeros(s_y(3), s_y(3), s_y(1)-1);
-    log_cov_dets = arrayfun(@(ld_idx) log(det(emission_covs(:, :, ld_idx))),...
-        1:s_y(3));
-%     fprintf('\tStarting forward pass...\n')
-    p_x(1, :) = filteredDistT1(y(1, :, :), pi_1, p_ugx(1, :),...
+    log_cov_dets = arrayfun(@(ld_idx) log(det(emission_covs(:, :, ld_idx))), 1:s_y(3));
+
+    p_x(1, :) = forwardOneStep(y(1, :, :), pi_1, p_ugx(1, :),...
         emission_means, emission_covs, log_cov_dets, zero_probs(1, :));
+    
     for t = 2:s_y(1)
-        p_x(t, :) = forwardOneStep(y(t, :, :), p_x(t-1, :), P, p_ugx(t, :),...
+        p_x(t, :) = forwardOneStep(y(t, :, :), p_x(t-1, :)*P, p_ugx(t, :),...
             emission_means, emission_covs, log_cov_dets, zero_probs(t, :));
         p_x(t, :) = p_x(t, :) + 1e-6;
         p_x(t, :) = p_x(t, :) ./ sum(p_x(t, :));
-% %         if all(isnan(p_x(t, :)))
-% %             p_x(t, :) = ones(1, s_y(3)) ./ s_y(3);
-% %         end
     end
-%     fprintf('\tForward pass completed. Starting backward pass...\n')
-    for t = (s_y(1)-1):-1:1
-        [p_x(t, :), p_x_x_next(:, :, t)] =...
-            backwardOneStep(p_x(t, :), p_x(t+1, :), P);
-    end
-%     fprintf('\tBackward pass completed.\n')
 
+    for t = (s_y(1)-1):-1:1
+        [p_x(t, :), p_x_x_next(:, :, t)] = backwardOneStep(p_x(t, :), p_x(t+1, :), P);
+    end
 end
